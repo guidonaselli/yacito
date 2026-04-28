@@ -1,5 +1,7 @@
 # 👶 Yacito
 
+[![CI](https://github.com/guidonaselli/yacito/actions/workflows/ci.yml/badge.svg)](https://github.com/guidonaselli/yacito/actions/workflows/ci.yml)
+
 <p align="center">
   <img src="static/yacito-logo.png" alt="Yacito logo" width="180" />
 </p>
@@ -10,7 +12,7 @@ Yacito (from the Sanskrit *yācito*, meaning "requested") is a user-friendly des
 
 ## 🍼 Quick Install
 
-Get up and running in seconds. These scripts install Rust, system dependencies, and project requirements.
+Get up and running from source in seconds. These scripts install Rust, system dependencies, httpYac, project requirements, build the production desktop app, and create a convenient launcher/shortcut when supported.
 
 ### Windows (PowerShell)
 ```powershell
@@ -29,7 +31,9 @@ If you prefer to do it yourself:
 1.  **Clone the repo**: `git clone https://github.com/guidonaselli/yacito`
 2.  **Install dependencies**: `npm install`
 3.  **Setup httpYac**: `npm run setup:httpyac`
-4.  **Run it**: `npm run dev:app`
+4.  **Validate your environment**: `npm run doctor`
+5.  **Run it in development**: `npm run dev:app`
+6.  **Build the desktop app**: `npm run build:app`
 
 ## ✨ Features
 
@@ -60,14 +64,23 @@ To enable the internal generator, provide a `yacito.config.json` in your `.http`
 
 Yacito will fetch the OpenAPI specs and generate the corresponding `.http` files and `http-client.env.json` when you click **Sync**.
 
-## 📦 Building for Production
+## 📦 Builds and Artifacts
 
-To generate a standalone `.exe` or `.msi`:
+Every push and pull request runs the full CI pipeline: Svelte type-checking, frontend build, Rust formatting, Clippy, Rust tests, and real Tauri desktop builds for Linux, Windows, and macOS.
+
+You can download temporary CI build artifacts from the [GitHub Actions CI workflow](https://github.com/guidonaselli/yacito/actions/workflows/ci.yml):
+
+- `yacito-windows`
+- `yacito-linux`
+- `yacito-macos`
+
+For a local production build:
 
 ```bash
 npm run build:app
 ```
-The artifacts will be generated in `src-tauri/target/release/bundle/`.
+
+The local artifacts will be generated in `src-tauri/target/release/bundle/`.
 
 ## 👶 Why Yacito?
 
