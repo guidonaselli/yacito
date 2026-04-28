@@ -513,22 +513,27 @@ fn build_httpyac_cmd(dir: &Path) -> Command {
     let httpyac = find_httpyac();
 
     #[cfg(windows)]
-    {
-        if dir.to_string_lossy().starts_with(r"\\") {
-            let mut cmd = Command::new("powershell.exe");
-            cmd.arg("-NoProfile")
-                .arg("-NonInteractive")
-                .arg("-ExecutionPolicy")
-                .arg("Bypass")
-                .arg("-Command");
-
-            let ps_command = format!(
-                "Set-Location -LiteralPath '{}'; & '{}'",
-                dir.to_string_lossy().replace("'", "''"),
-                httpyac.replace("'", "''")
-            );
-            cmd.arg(&ps_command);
-            return cmd;
+    if httpyac.to_lowercase().ends_with(".cmd") {
+        if let Ok(content) = fs::read_to_string(&httpyac) {
+            for line in content.lines() {
+                if line.contains("httpyac.js") {
+                    let parts: Vec<&str> = line.split('"').collect();
+                    for part in parts {
+                        if part.ends_with("httpyac.js") {
+                            let js_path = part.replace("%dp0%\\", "").replace("%~dp0", "");
+                            if let Some(base_dir) = Path::new(&httpyac).parent() {
+                                let full_js_path = base_dir.join(js_path);
+                                if full_js_path.is_file() {
+                                    let mut cmd = Command::new("node");
+                                    cmd.arg(full_js_path);
+                                    cmd.current_dir(dir);
+                                    return cmd;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
