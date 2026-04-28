@@ -76,7 +76,7 @@
       envs = newEnvs;
       capabilities = apiHttpDir
         ? await invoke<WorkspaceCapabilities>('get_workspace_capabilities', { apiHttpDir })
-        : { generator_available: false, generator_path: null };
+        : { generator_available: false, generator_path: null, internal_generator_available: false };
       if (newEnvs.length > 0 && !selectedEnv) {
         selectedEnv = newEnvs[0];
       }
@@ -97,7 +97,7 @@
     envs = newEnvs;
     capabilities = apiHttpDir
       ? await invoke<WorkspaceCapabilities>('get_workspace_capabilities', { apiHttpDir })
-      : { generator_available: false, generator_path: null };
+      : { generator_available: false, generator_path: null, internal_generator_available: false };
     selectedEnv = newEnvs.includes(selectedEnv) ? selectedEnv : (newEnvs[0] ?? '');
     expanded = new Set(services.map((s) => s.service));
     if (apiHttpDir) {
