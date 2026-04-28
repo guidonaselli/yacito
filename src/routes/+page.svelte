@@ -221,6 +221,21 @@
     }
   }
 
+  async function createConfig() {
+    if (!apiHttpDir) return;
+    syncing = true;
+    syncResult = null;
+    try {
+      const msg = await invoke<string>('create_template_config', { apiHttpDir });
+      syncResult = { stdout: msg, stderr: '', exit_code: 0 };
+      await loadAll();
+    } catch (e) {
+      syncResult = { stdout: '', stderr: String(e), exit_code: -1 };
+    } finally {
+      syncing = false;
+    }
+  }
+
   function toggle(service: string) {
     const next = new Set(expanded);
     next.has(service) ? next.delete(service) : next.add(service);
@@ -267,7 +282,7 @@
 
 <div class="app">
   <header>
-    <div class="brand"><img src="/yacito-logo.png" alt="" aria-hidden="true" /> <span>Yacito</span></div>
+    <div class="brand"><img src="/yacito-logo.png" alt="Yacito logo" /></div>
     <div class="toolbar">
       <div class="folder-group">
         <label class="field folder-field">
@@ -293,14 +308,25 @@
             <option value="selected" disabled={!selectedEndpoint}>{t('selected')}</option>
           </select>
         </label>
-        <button
-          class="resync-btn"
-          onclick={resync}
-          title={capabilities.generator_path ?? t('generatorHint')}
-          disabled={!apiHttpDir || !capabilities.generator_available || syncing || (syncScope === 'selected' && !selectedEndpoint)}
-        >
-          {capabilities.generator_available ? (syncing ? t('syncing') : syncLabel()) : t('generatorUnavailable')}
-        </button>
+        {#if capabilities.generator_available}
+          <button
+            class="resync-btn"
+            onclick={resync}
+            title={capabilities.generator_path ?? t('generatorHint')}
+            disabled={!apiHttpDir || syncing || (syncScope === 'selected' && !selectedEndpoint)}
+          >
+            {syncing ? t('syncing') : syncLabel()}
+          </button>
+        {:else}
+          <button
+            class="resync-btn"
+            onclick={createConfig}
+            title={t('generatorHint')}
+            disabled={!apiHttpDir || syncing}
+          >
+            {syncing ? t('syncing') : t('createConfig')}
+          </button>
+        {/if}
       </div>
       {#if envs.length > 0}
         <label class="field">
@@ -514,12 +540,13 @@
 
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 24px; height: 72px;
+    padding: 16px 24px; min-height: 72px; height: auto;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
     z-index: 10;
     box-shadow: 0 1px 2px oklch(0% 0 0 / 0.02);
+    flex-wrap: wrap; gap: 16px;
   }
 
   .brand {
@@ -531,21 +558,22 @@
     width: 44px; height: 44px; object-fit: contain;
   }
 
-  .toolbar { display: flex; align-items: center; gap: 20px; min-width: 0; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
+  .toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 20px; min-width: 0; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
   .field > span { 
     font-size: 10px; 
     color: var(--color-text-dim); 
     text-transform: uppercase; 
     font-weight: 700;
     letter-spacing: 0.08em; 
+    line-height: 1;
   }
 
   .folder-group, .resync-group {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: flex-end; gap: 12px;
     padding-right: 20px; border-right: 1.5px solid var(--color-border);
   }
-  .folder-field input { width: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 500; }
+  .folder-field input { width: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 500; height: 35px; }
 
   /* Accessibility: Focus States */
   :global(*:focus-visible) {
@@ -563,9 +591,10 @@
     border: 1.5px solid var(--color-border);
     border-radius: var(--radius-sm);
     color: var(--color-text);
-    padding: 8px 12px;
+    padding: 0 12px;
     font-size: 13px;
     outline: none;
+    height: 35px;
   }
   select:focus, input:focus { 
     border-color: var(--color-primary);
@@ -578,11 +607,12 @@
     color: var(--color-text);
     border: 1.5px solid var(--color-border);
     border-radius: var(--radius-sm);
-    padding: 8px 16px;
+    padding: 0 16px;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
+    height: 35px;
   }
   .folder-btn:hover:not(:disabled), .resync-btn:hover:not(:disabled) {
     border-color: var(--color-primary);
@@ -590,8 +620,8 @@
     background: var(--color-surface-alt);
   }
 
-  .token-wrap { display: flex; align-items: stretch; }
-  .token-wrap input { width: 160px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+  .token-wrap { display: flex; align-items: stretch; height: 35px; }
+  .token-wrap input { width: 160px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); height: 35px; }
   .toggle-vis {
     background: var(--color-surface-alt);
     border: 1.5px solid var(--color-border);
@@ -602,6 +632,7 @@
     font-size: 14px;
     display: flex;
     align-items: center;
+    height: 35px;
   }
 
   main { display: flex; flex: 1; overflow: hidden; }

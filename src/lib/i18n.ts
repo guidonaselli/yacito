@@ -41,6 +41,7 @@ const dictionaries = {
     exit: 'exit {code}',
     generatorUnavailable: 'Generator not detected',
     generatorHint: 'Provide a yacito.config.json or scripts/generate-http-files.py to enable Resync',
+    createConfig: 'Create Config',
   },
   es: {
     appName: 'Yacito',
@@ -81,6 +82,7 @@ const dictionaries = {
     exit: 'exit {code}',
     generatorUnavailable: 'Generador no detectado',
     generatorHint: 'Provee un yacito.config.json o scripts/generate-http-files.py para habilitar Resync',
+    createConfig: 'Crear Config',
   },
 } satisfies Record<Language, Record<string, string>>;
 

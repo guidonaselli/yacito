@@ -793,6 +793,37 @@ fn run_internal_generator(
 }
 
 #[tauri::command]
+fn create_template_config(api_http_dir: String) -> Result<String, String> {
+    let dir = Path::new(&api_http_dir);
+    if !dir.is_dir() {
+        return Err(format!("Invalid api-http directory: {}", api_http_dir));
+    }
+    let config_path = dir.join("yacito.config.json");
+    if config_path.exists() {
+        return Err("yacito.config.json already exists".to_string());
+    }
+
+    let default_config = serde_json::json!({
+      "services": [
+        { "name": "auth-manager", "localPort": 8099, "dockerPort": 5000, "hostVar": "authManager", "openapiPath": "/v3/api-docs" },
+        { "name": "edificio-manager", "localPort": 8083, "dockerPort": 5003, "hostVar": "edificioManager", "openapiPath": "/v3/api-docs" },
+        { "name": "evento-manager", "localPort": 8081, "dockerPort": 5001, "hostVar": "eventoManager", "openapiPath": "/v3/api-docs" },
+        { "name": "incidencia-manager", "localPort": 8082, "dockerPort": 5002, "hostVar": "incidenciaManager", "openapiPath": "/v3/api-docs" },
+        { "name": "despacho-manager", "localPort": 8080, "dockerPort": 5004, "hostVar": "despachoManager", "openapiPath": "/v3/api-docs" },
+        { "name": "mensaje-manager", "localPort": 8085, "dockerPort": 5005, "hostVar": "mensajeManager", "openapiPath": "/v3/api-docs" },
+        { "name": "plataforma-manager", "localPort": 8091, "dockerPort": 5006, "hostVar": "plataformaManager", "openapiPath": "/v3/api-docs" },
+        { "name": "auditoria-manager", "localPort": 8090, "dockerPort": 5007, "hostVar": "auditoriaManager", "openapiPath": "/v3/api-docs" },
+        { "name": "integrador-manager", "localPort": 5008, "dockerPort": 5008, "hostVar": "integradorManager", "openapiPath": "/v3/api-docs" }
+      ]
+    });
+
+    fs::write(&config_path, serde_json::to_string_pretty(&default_config).unwrap())
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+
+    Ok("Created yacito.config.json. You can now click Sync!".to_string())
+}
+
+#[tauri::command]
 fn start_file_watcher(app: AppHandle, api_http_dir: String) -> Result<(), String> {
     let watched_dirs = WATCHED_DIRS.get_or_init(|| Mutex::new(HashSet::new()));
     {
@@ -852,6 +883,7 @@ pub fn run() {
             execute_request,
             execute_raw_request,
             run_generate_http_files,
+            create_template_config,
             start_file_watcher,
         ])
         .run(tauri::generate_context!())
