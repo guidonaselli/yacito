@@ -496,7 +496,7 @@
     
     --spacing-base: 8px;
     /* Modern Multi-layer Shadow */
-    --shadow-soft: 0 2px 4px oklch(0% 0 0 / 0.02), 0 8px 16px -4px oklch(220% 0.05 220 / 0.04);
+    --shadow-soft: 0 2px 4px oklch(0% 0 0 / 0.02), 0 8px 16px -4px oklch(20% 0.05 220 / 0.04);
   }
 
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
@@ -710,7 +710,7 @@
     box-shadow: var(--shadow-soft);
   }
   .editor-card:focus-within {
-    box-shadow: 0 12px 30px -10px oklch(220% 0.1 220 / 0.08);
+    box-shadow: 0 12px 30px -10px oklch(20% 0.1 220 / 0.08);
     border-color: var(--color-primary);
   }
 
