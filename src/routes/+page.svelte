@@ -40,6 +40,32 @@
   let token = $state('');
   let selectedEndpoint = $state<Endpoint | null>(null);
   let result = $state<ExecuteResult | null>(null);
+
+  function parseOutput(stdout: string) {
+    if (!stdout) return { trace: '', body: '' };
+    
+    const summaryRegex = /\n\d+ requests processed.*\n?$/;
+    let text = stdout.replace(summaryRegex, '').trim();
+    
+    const statusMatch = text.match(/HTTP\/\d\.\d\s+\d{3}.*\n/g);
+    if (statusMatch && statusMatch.length > 0) {
+      const lastStatus = statusMatch[statusMatch.length - 1];
+      const statusIdx = text.lastIndexOf(lastStatus);
+      
+      const afterStatus = text.substring(statusIdx);
+      const splitIdx = afterStatus.search(/\n\r?\n|\r\n\r\n/);
+      
+      if (splitIdx !== -1) {
+        const reqTrace = text.substring(0, statusIdx + splitIdx).trim();
+        const resBody = afterStatus.substring(splitIdx).trim();
+        return { trace: reqTrace, body: resBody };
+      }
+    }
+    return { trace: '', body: text };
+  }
+
+  let parsedResult = $derived(result?.stdout ? parseOutput(result.stdout) : null);
+
   let executing = $state(false);
   let expanded = $state<Set<string>>(new Set());
   let tokenVisible = $state(false);
@@ -300,9 +326,9 @@
 
 <div class="app">
   <header>
-    <div class="brand"><img src="/yacito-logo.png" alt="Yacito logo" /></div>
     <div class="toolbar">
       <div class="folder-group">
+        <div class="brand"><img src="/yacito-logo.png" alt="Yacito logo" /></div>
         <label class="field folder-field">
           <span>{t('folder')}</span>
           <input type="text" value={apiHttpDir || t('noFolder')} readonly title={apiHttpDir} />
@@ -464,7 +490,12 @@
               <pre class="out err-out">{result.stderr}</pre>
             {/if}
             {#if result.stdout}
-              <pre class="out ok-out">{result.stdout}</pre>
+              {#if parsedResult?.trace}
+                <div class="trace-label">HTTP Trace</div>
+                <pre class="out trace-out">{parsedResult.trace}</pre>
+                <div class="trace-label">Response Body</div>
+              {/if}
+              <pre class="out ok-out">{parsedResult?.body || result.stdout}</pre>
             {:else if !result.stderr}
               <div class="status-msg">{t('noOutput')}</div>
             {/if}
@@ -544,7 +575,7 @@
 
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 24px; min-height: 72px; height: auto;
+    padding: 12px 24px; min-height: 64px; height: auto;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
@@ -554,15 +585,13 @@
   }
 
   .brand {
-    display: flex; align-items: center; gap: 14px;
-    font-weight: 800; font-size: 20px; color: var(--color-text);
-    letter-spacing: -0.03em;
+    display: flex; align-items: center; justify-content: center;
   }
   .brand img {
-    width: 44px; height: 44px; object-fit: contain;
+    width: 32px; height: 32px; object-fit: contain; margin-right: 8px;
   }
 
-  .toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 20px; min-width: 0; }
+  .toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; min-width: 0; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field > span { 
     font-size: 10px; 
@@ -575,9 +604,9 @@
 
   .folder-group, .resync-group {
     display: flex; align-items: flex-end; gap: 12px;
-    padding-right: 20px; border-right: 1.5px solid var(--color-border);
+    padding-right: 16px; border-right: 1.5px solid var(--color-border);
   }
-  .folder-field input { width: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 500; height: 35px; }
+  .folder-field input { width: 200px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 500; height: 32px; }
 
   /* Accessibility: Focus States */
   :global(*:focus-visible) {
@@ -598,7 +627,7 @@
     padding: 0 12px;
     font-size: 13px;
     outline: none;
-    height: 35px;
+    height: 32px;
   }
   select:focus, input:focus { 
     border-color: var(--color-primary);
@@ -616,7 +645,7 @@
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
-    height: 35px;
+    height: 32px;
   }
   .folder-btn:hover:not(:disabled), .resync-btn:hover:not(:disabled) {
     border-color: var(--color-primary);
@@ -624,8 +653,8 @@
     background: var(--color-surface-alt);
   }
 
-  .token-wrap { display: flex; align-items: stretch; height: 35px; }
-  .token-wrap input { width: 160px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); height: 35px; }
+  .token-wrap { display: flex; align-items: stretch; height: 32px; }
+  .token-wrap input { width: 140px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); height: 32px; }
   .toggle-vis {
     background: var(--color-surface-alt);
     border: 1.5px solid var(--color-border);
@@ -636,55 +665,55 @@
     font-size: 14px;
     display: flex;
     align-items: center;
-    height: 35px;
+    height: 32px;
   }
 
   main { display: flex; flex: 1; overflow: hidden; }
 
   aside {
-    width: 320px; min-width: 240px;
+    width: 280px; min-width: 220px;
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
     overflow-y: auto;
     flex-shrink: 0;
-    padding: 16px 8px;
+    padding: 12px 8px;
     display: flex;
     flex-direction: column;
   }
 
   .search-box {
-    margin: 0 8px 16px 8px;
+    margin: 0 8px 12px 8px;
     flex-shrink: 0;
   }
   .search-box input {
     width: 100%;
-    border-radius: var(--radius-lg);
-    padding: 10px 16px;
-    font-size: 13px;
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 12px;
     background-color: var(--color-bg);
   }
 
-  .hint { padding: 32px 24px; color: var(--color-text-dim); font-size: 13px; line-height: 1.6; text-align: center; }
+  .hint { padding: 24px 16px; color: var(--color-text-dim); font-size: 13px; line-height: 1.6; text-align: center; }
   .hint code { font-size: 11px; color: var(--color-primary); background: var(--color-surface-alt); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
 
-  .svc-block { margin-bottom: 8px; }
+  .svc-block { margin-bottom: 4px; }
   .svc-btn {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    padding: 12px 16px; background: none; border: none;
-    color: var(--color-text); cursor: pointer; font-size: 14px; font-weight: 700; text-align: left;
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 10px 12px; background: none; border: none;
+    color: var(--color-text); cursor: pointer; font-size: 13px; font-weight: 700; text-align: left;
     border-radius: var(--radius-sm);
   }
   .svc-btn:hover { background: var(--color-surface-alt); }
-  .chevron { font-size: 12px; color: var(--color-text-dim); width: 16px; text-align: center; transition: transform 0.2s; }
+  .chevron { font-size: 12px; color: var(--color-text-dim); width: 14px; text-align: center; transition: transform 0.2s; }
   .badge {
     margin-left: auto; font-size: 11px; color: var(--color-text-dim);
-    background: var(--color-surface-alt); border-radius: 12px; padding: 2px 10px; font-weight: 600;
+    background: var(--color-surface-alt); border-radius: 12px; padding: 2px 8px; font-weight: 600;
   }
 
   .ep-btn {
-    display: flex; align-items: center; gap: 12px; width: 100%;
-    padding: 10px 16px 10px 36px; background: none; border: none;
-    color: var(--color-text-dim); cursor: pointer; font-size: 13px; text-align: left;
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 12px 8px 30px; background: none; border: none;
+    color: var(--color-text-dim); cursor: pointer; font-size: 12px; text-align: left;
     border-radius: var(--radius-sm);
     margin-top: 2px;
   }
@@ -697,43 +726,43 @@
 
   .mtag {
     font-size: 9px; font-weight: 800; letter-spacing: 0.08em;
-    min-width: 44px; text-align: center; padding: 3px 6px;
-    border-radius: 6px; background: var(--color-surface-alt);
+    min-width: 40px; text-align: center; padding: 2px 6px;
+    border-radius: 4px; background: var(--color-surface-alt);
     border: 1.5px solid currentColor;
     flex-shrink: 0;
   }
-  .mtag.lg { font-size: 11px; padding: 5px 12px; min-width: 68px; }
+  .mtag.lg { font-size: 11px; padding: 4px 10px; min-width: 56px; }
 
   .epath {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-weight: 500;
   }
 
   .panel { flex: 1; display: flex; flex-direction: column; overflow-y: auto; background: var(--color-bg); position: relative; }
 
   .req-bar {
-    display: flex; align-items: center; gap: 16px;
-    padding: 24px 32px; background: var(--color-surface);
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 24px; background: var(--color-surface);
     border-bottom: 1px solid var(--color-border); flex-shrink: 0;
     position: sticky; top: 0; z-index: 5;
   }
   .req-path { 
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
-    font-size: 18px; flex: 1; color: var(--color-text); font-weight: 600;
+    font-size: 15px; flex: 1; color: var(--color-text); font-weight: 600;
     letter-spacing: -0.02em;
   }
   
   .send-btn {
     background: var(--color-primary); color: var(--color-primary-text); 
     border: none; border-radius: var(--radius-sm);
-    padding: 10px 32px; font-size: 14px; font-weight: 800; cursor: pointer;
+    padding: 8px 24px; font-size: 13px; font-weight: 800; cursor: pointer;
     box-shadow: 0 4px 12px oklch(var(--color-primary) / 0.2);
   }
   .send-btn:hover:not(:disabled) { 
     background: var(--color-primary-hover); 
-    transform: translateY(-1.5px);
-    box-shadow: 0 8px 20px oklch(var(--color-primary) / 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px oklch(var(--color-primary) / 0.25);
   }
   .send-btn:active:not(:disabled) { transform: translateY(0); }
   .send-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
@@ -742,12 +771,12 @@
 
   .dirty-pill {
     color: var(--color-danger); border: 1.5px solid oklch(var(--color-danger) / 0.2); background: oklch(var(--color-danger) / 0.05);
-    border-radius: 999px; padding: 3px 12px; font-size: 11px; font-weight: 700;
+    border-radius: 999px; padding: 2px 10px; font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
   }
 
   .req-name {
-    padding: 12px 32px 16px; font-size: 13px; color: var(--color-text-dim);
+    padding: 8px 24px 12px; font-size: 12px; color: var(--color-text-dim);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     background: var(--color-surface); flex-shrink: 0;
     font-weight: 500;
@@ -755,7 +784,7 @@
 
   .editor-card, .resp, .sync-log {
     display: flex; flex-direction: column; flex-shrink: 0;
-    margin: 24px 32px 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    margin: 16px 24px 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
     background: var(--color-surface); overflow: hidden;
     box-shadow: var(--shadow-soft);
   }
@@ -766,40 +795,47 @@
 
   .editor-head, .resp-head, .sync-log-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; background: var(--color-surface-alt); border-bottom: 1px solid var(--color-border);
-    font-size: 11px; color: var(--color-text-dim); font-weight: 800; text-transform: uppercase;
+    padding: 12px 16px; background: var(--color-surface-alt); border-bottom: 1px solid var(--color-border);
+    font-size: 10px; color: var(--color-text-dim); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.1em;
   }
-  .editor-actions { display: flex; align-items: center; gap: 12px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+  .editor-actions { display: flex; align-items: center; gap: 10px; font-weight: 600; text-transform: none; letter-spacing: normal; }
   .editor-actions button {
     background: var(--color-surface); color: var(--color-text); border: 1.5px solid var(--color-border); border-radius: 6px;
-    padding: 4px 12px; cursor: pointer; font-size: 12px; font-weight: 700;
+    padding: 4px 10px; cursor: pointer; font-size: 11px; font-weight: 700;
   }
   .editor-actions button:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 
   textarea {
-    width: 100%; height: 280px; resize: vertical; min-height: 120px; max-height: 45vh;
-    background: var(--color-surface); color: var(--color-text); border: none; outline: none; padding: 20px;
+    width: 100%; height: 200px; resize: vertical; min-height: 100px; max-height: 40vh;
+    background: var(--color-surface); color: var(--color-text); border: none; outline: none; padding: 16px;
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-    font-size: 13px; line-height: 1.7;
+    font-size: 12px; line-height: 1.6;
   }
 
-  .resp { flex: 1; margin: 24px 32px 32px; min-height: 300px; }
+  .resp { flex: 1; margin: 16px 24px 24px; min-height: 300px; }
   .resp.resp-err { border-color: oklch(var(--color-danger) / 0.3); }
   
   .ok { color: var(--color-success); font-weight: 800; }
   .err { color: var(--color-danger); font-weight: 800; }
 
   .out {
-    flex: 1; overflow: auto; padding: 20px;
+    flex: 1; overflow: auto; padding: 16px;
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-    font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+    font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
   }
   .ok-out { color: var(--color-text); }
   .err-out {
     color: var(--color-danger); background: oklch(var(--color-danger) / 0.02);
     border-bottom: 1px solid var(--color-border); flex-shrink: 0; max-height: 35%;
   }
+
+  .trace-label {
+    background: var(--color-surface-alt); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border);
+    padding: 6px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-dim);
+  }
+  .trace-label:first-child { border-top: none; }
+  .trace-out { color: var(--color-text-dim); flex: 0 1 auto; max-height: 250px; background: oklch(98% 0.005 220); }
 
   .sync-log { margin: 0 32px 24px; max-height: 260px; flex-shrink: 0; }
   .sync-log .out { max-height: 200px; flex: 0 1 auto; }
