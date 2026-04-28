@@ -48,10 +48,10 @@ To enable the internal generator, provide a `yacito.config.json` in your `.http`
 {
   "services": [
     {
-      "name": "auth-manager",
-      "localPort": 8099,
+      "name": "example-service",
+      "localPort": 8080,
       "dockerPort": 5000,
-      "hostVar": "authManager",
+      "hostVar": "exampleService",
       "openapiPath": "/v3/api-docs"
     }
   ]
