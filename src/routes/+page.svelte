@@ -222,6 +222,7 @@
     if (!apiHttpDir || syncing || !capabilities.generator_available) return;
     syncing = true;
     syncResult = null;
+    selectedEndpoint = null; // Bring user to the main empty panel for the sync log
     const service = syncScope === 'selected' ? selectedServiceName() : null;
     try {
       syncResult = await invoke<ExecuteResult>('run_generate_http_files', {
@@ -241,6 +242,7 @@
     if (!apiHttpDir) return;
     syncing = true;
     syncResult = null;
+    selectedEndpoint = null; // Bring user to the main empty panel for the log
     try {
       const msg = await invoke<string>('create_template_config', { apiHttpDir });
       syncResult = { stdout: msg, stderr: '', exit_code: 0 };
@@ -469,27 +471,6 @@
           </div>
         {:else}
           <div class="status-msg idle">{t('pressSend')}</div>
-        {/if}
-
-        {#if syncResult}
-          <div class="sync-log" class:sync-log-err={syncResult.exit_code !== 0}>
-            <div class="sync-log-head">
-              {t('syncLog')}
-              {#if syncResult.exit_code === 0}
-                <span class="ok">✓ {t('ok')}</span>
-              {:else}
-                <span class="err">✗ {t('exit', { code: syncResult.exit_code })}</span>
-              {/if}
-            </div>
-            {#if syncResult.stderr}
-              <pre class="out err-out">{syncResult.stderr}</pre>
-            {/if}
-            {#if syncResult.stdout}
-              <pre class="out ok-out">{syncResult.stdout}</pre>
-            {:else if !syncResult.stderr}
-              <div class="status-msg">{t('noSyncOutput')}</div>
-            {/if}
-          </div>
         {/if}
       {:else}
         <div class="empty-panel">
@@ -729,12 +710,13 @@
     font-weight: 500;
   }
 
-  .panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--color-bg); }
+  .panel { flex: 1; display: flex; flex-direction: column; overflow-y: auto; background: var(--color-bg); position: relative; }
 
   .req-bar {
     display: flex; align-items: center; gap: 16px;
     padding: 24px 32px; background: var(--color-surface);
     border-bottom: 1px solid var(--color-border); flex-shrink: 0;
+    position: sticky; top: 0; z-index: 5;
   }
   .req-path { 
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
@@ -772,7 +754,7 @@
   }
 
   .editor-card, .resp, .sync-log {
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; flex-shrink: 0;
     margin: 24px 32px 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
     background: var(--color-surface); overflow: hidden;
     box-shadow: var(--shadow-soft);
@@ -802,7 +784,7 @@
     font-size: 13px; line-height: 1.7;
   }
 
-  .resp { flex: 1; margin: 24px 32px; }
+  .resp { flex: 1; margin: 24px 32px 32px; min-height: 300px; }
   .resp.resp-err { border-color: oklch(var(--color-danger) / 0.3); }
   
   .ok { color: var(--color-success); font-weight: 800; }
