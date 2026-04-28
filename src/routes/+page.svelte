@@ -79,6 +79,7 @@
   let choosingDir = $state(false);
   let language = $state<Language>('en');
   let searchQuery = $state('');
+  let importingPostman = $state(false);
 
   interface WorkspaceCapabilities {
     generator_available: boolean;
@@ -280,6 +281,35 @@
     }
   }
 
+
+  async function importPostmanCollection() {
+    if (!apiHttpDir || importingPostman) return;
+    importingPostman = true;
+    syncResult = null;
+    selectedEndpoint = null;
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        defaultPath: apiHttpDir,
+        title: t('selectPostmanTitle'),
+        filters: [{ name: 'Postman Collection', extensions: ['json'] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+
+      const msg = await invoke<string>('import_postman_collection', {
+        apiHttpDir,
+        collectionFile: selected,
+      });
+      syncResult = { stdout: msg, stderr: '', exit_code: 0 };
+      await loadAll();
+    } catch (e) {
+      syncResult = { stdout: '', stderr: String(e), exit_code: -1 };
+    } finally {
+      importingPostman = false;
+    }
+  }
+
   function toggle(service: string) {
     const next = new Set(expanded);
     next.has(service) ? next.delete(service) : next.add(service);
@@ -371,6 +401,14 @@
             {syncing ? t('syncing') : t('createConfig')}
           </button>
         {/if}
+        <button
+          class="resync-btn"
+          onclick={importPostmanCollection}
+          title={t('importPostmanHint')}
+          disabled={!apiHttpDir || importingPostman || syncing}
+        >
+          {importingPostman ? t('importingPostman') : t('importPostman')}
+        </button>
       </div>
       {#if envs.length > 0}
         <label class="field">

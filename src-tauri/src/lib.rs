@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -828,6 +828,328 @@ fn run_internal_generator(
     }
 }
 
+fn sanitize_file_stem(name: &str) -> String {
+    let mut out = String::new();
+    let mut last_dash = false;
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            last_dash = false;
+        } else if (ch == '-' || ch == '_' || ch.is_whitespace()) && !last_dash && !out.is_empty() {
+            out.push(if ch == '_' { '_' } else { '-' });
+            last_dash = true;
+        }
+    }
+    let out = out.trim_matches('-').trim_matches('_').to_string();
+    if out.is_empty() {
+        "postman-collection".to_string()
+    } else {
+        out
+    }
+}
+
+fn unique_http_path(dir: &Path, stem: &str) -> PathBuf {
+    let mut path = dir.join(format!("{stem}.http"));
+    if !path.exists() {
+        return path;
+    }
+
+    for i in 2..1000 {
+        path = dir.join(format!("{stem}-{i}.http"));
+        if !path.exists() {
+            return path;
+        }
+    }
+
+    dir.join(format!("{stem}-{}.http", std::process::id()))
+}
+
+fn postman_string(value: &serde_json::Value, key: &str) -> Option<String> {
+    value.get(key)?.as_str().map(|s| s.to_string())
+}
+
+fn collect_postman_variables(text: &str, vars: &mut BTreeSet<String>) {
+    let mut rest = text;
+    while let Some(start) = rest.find("{{") {
+        let after_start = &rest[start + 2..];
+        let Some(end) = after_start.find("}}") else {
+            break;
+        };
+        let name = after_start[..end].trim();
+        if !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        {
+            vars.insert(name.to_string());
+        }
+        rest = &after_start[end + 2..];
+    }
+}
+
+fn postman_basic_auth(request: &serde_json::Value) -> Option<(String, String)> {
+    let auth = request.get("auth")?;
+    if auth.get("type")?.as_str()? != "basic" {
+        return None;
+    }
+
+    let mut username = String::new();
+    let mut password = String::new();
+    for entry in auth.get("basic")?.as_array()? {
+        match entry.get("key").and_then(|v| v.as_str()) {
+            Some("username") => username = entry.get("value")?.as_str()?.to_string(),
+            Some("password") => password = entry.get("value")?.as_str()?.to_string(),
+            _ => {}
+        }
+    }
+
+    Some((username, password))
+}
+
+fn postman_url_raw(request: &serde_json::Value) -> Option<String> {
+    match request.get("url")? {
+        serde_json::Value::String(url) => Some(url.to_string()),
+        serde_json::Value::Object(_) => postman_string(request.get("url")?, "raw"),
+        _ => None,
+    }
+}
+
+fn append_postman_event_comments(item: &serde_json::Value, out: &mut String) {
+    let Some(events) = item.get("event").and_then(|v| v.as_array()) else {
+        return;
+    };
+
+    for event in events {
+        let listen = event
+            .get("listen")
+            .and_then(|v| v.as_str())
+            .unwrap_or("script");
+        let script_lines = event
+            .get("script")
+            .and_then(|v| v.get("exec"))
+            .and_then(|v| v.as_array());
+        let Some(script_lines) = script_lines else {
+            continue;
+        };
+        if script_lines.is_empty() {
+            continue;
+        }
+
+        out.push_str(&format!(
+            "# TODO: Postman {listen} script was preserved as comments. Convert pm.* APIs to httpYac scripting before enabling it.\n"
+        ));
+        for line in script_lines {
+            if let Some(line) = line.as_str() {
+                out.push_str("# postman-script: ");
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+    }
+}
+
+fn append_postman_request(
+    item: &serde_json::Value,
+    folder_prefix: &str,
+    out: &mut String,
+    vars: &mut BTreeSet<String>,
+    basic_auth: &mut Option<(String, String)>,
+) -> Result<(), String> {
+    let Some(request) = item.get("request") else {
+        return Ok(());
+    };
+
+    let raw_name = item
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Postman request")
+        .replace('\n', " ");
+    let name = if folder_prefix.is_empty() {
+        raw_name
+    } else {
+        format!("{folder_prefix} / {raw_name}")
+    };
+    let method = postman_string(request, "method")
+        .unwrap_or_else(|| "GET".to_string())
+        .to_uppercase();
+    let url = postman_url_raw(request).ok_or_else(|| format!("Missing URL for request: {name}"))?;
+    collect_postman_variables(&url, vars);
+
+    out.push_str(&format!("\n### {method} {url} — {name}\n"));
+    append_postman_event_comments(item, out);
+    out.push_str(&format!("{method} {url}\n"));
+
+    let mut has_content_type = false;
+    let mut has_authorization = false;
+    if let Some(headers) = request.get("header").and_then(|v| v.as_array()) {
+        for header in headers {
+            if header
+                .get("disabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let Some(key) = header.get("key").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let value = header.get("value").and_then(|v| v.as_str()).unwrap_or("");
+            if key.eq_ignore_ascii_case("content-type") {
+                has_content_type = true;
+            }
+            if key.eq_ignore_ascii_case("authorization") {
+                has_authorization = true;
+            }
+            collect_postman_variables(value, vars);
+            out.push_str(&format!("{key}: {value}\n"));
+        }
+    }
+
+    if let Some((username, password)) = postman_basic_auth(request) {
+        if basic_auth.is_none() {
+            *basic_auth = Some((username.clone(), password.clone()));
+        }
+        if !has_authorization {
+            out.push_str(
+                "Authorization: Basic {{postmanBasicUsername}} {{postmanBasicPassword}}\n",
+            );
+        }
+    }
+
+    let body = request.get("body");
+    let raw_body = body
+        .and_then(|b| b.get("raw"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !raw_body.is_empty() {
+        if !has_content_type {
+            let language = body
+                .and_then(|b| b.get("options"))
+                .and_then(|v| v.get("raw"))
+                .and_then(|v| v.get("language"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if language.eq_ignore_ascii_case("json") || raw_body.trim_start().starts_with('{') {
+                out.push_str("Content-Type: application/json\n");
+            }
+        }
+        collect_postman_variables(raw_body, vars);
+        out.push('\n');
+        out.push_str(raw_body.trim_end());
+        out.push('\n');
+    }
+
+    Ok(())
+}
+
+fn append_postman_items(
+    items: &[serde_json::Value],
+    folder_prefix: &str,
+    out: &mut String,
+    vars: &mut BTreeSet<String>,
+    basic_auth: &mut Option<(String, String)>,
+) -> Result<(), String> {
+    for item in items {
+        if item.get("request").is_some() {
+            append_postman_request(item, folder_prefix, out, vars, basic_auth)?;
+        }
+        if let Some(children) = item.get("item").and_then(|v| v.as_array()) {
+            if item.get("event").is_some() {
+                out.push_str(
+                    "
+# Postman folder-level scripts for following requests
+",
+                );
+                append_postman_event_comments(item, out);
+            }
+            let folder_name = item
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Folder");
+            let next_prefix = if folder_prefix.is_empty() {
+                folder_name.to_string()
+            } else {
+                format!("{folder_prefix} / {folder_name}")
+            };
+            append_postman_items(children, &next_prefix, out, vars, basic_auth)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn import_postman_collection(
+    api_http_dir: String,
+    collection_file: String,
+) -> Result<String, String> {
+    let dir = Path::new(&api_http_dir);
+    if !dir.is_dir() {
+        return Err(format!("Selected folder does not exist: {api_http_dir}"));
+    }
+
+    let collection_path = Path::new(&collection_file);
+    if !collection_path.is_file() {
+        return Err(format!(
+            "Postman collection does not exist: {collection_file}"
+        ));
+    }
+
+    let content = fs::read_to_string(collection_path)
+        .map_err(|e| format!("Failed to read Postman collection: {e}"))?;
+    let json: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid Postman collection JSON: {e}"))?;
+    let name = json
+        .get("info")
+        .and_then(|info| info.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| {
+            collection_path
+                .file_stem()
+                .and_then(|v| v.to_str())
+                .unwrap_or("postman-collection")
+        });
+    let items = json
+        .get("item")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "Postman collection has no item array".to_string())?;
+
+    let mut body = String::new();
+    let mut vars = BTreeSet::new();
+    let mut basic_auth = None;
+    append_postman_items(items, "", &mut body, &mut vars, &mut basic_auth)?;
+    if body.trim().is_empty() {
+        return Err("No requests found in Postman collection".to_string());
+    }
+
+    let mut header = String::new();
+    header.push_str(&format!("# Imported from Postman collection: {name}\n"));
+    header.push_str(&format!(
+        "# Source: {}\n\n",
+        collection_path.to_string_lossy()
+    ));
+    if let Some((username, password)) = basic_auth {
+        header.push_str(&format!("@postmanBasicUsername = {username}\n"));
+        header.push_str(&format!("@postmanBasicPassword = {password}\n"));
+    }
+    for var in vars {
+        if var == "postmanBasicUsername" || var == "postmanBasicPassword" {
+            continue;
+        }
+        header.push_str(&format!("@{var} = TODO\n"));
+    }
+    header.push('\n');
+
+    let stem = sanitize_file_stem(name);
+    let target = unique_http_path(dir, &stem);
+    fs::write(&target, format!("{header}{}", body.trim_start()))
+        .map_err(|e| format!("Failed to write imported .http file: {e}"))?;
+
+    Ok(format!(
+        "Imported Postman collection into {}",
+        target.to_string_lossy()
+    ))
+}
+
 #[tauri::command]
 fn create_template_config(api_http_dir: String) -> Result<String, String> {
     let dir = Path::new(&api_http_dir);
@@ -921,8 +1243,76 @@ pub fn run() {
             execute_raw_request,
             run_generate_http_files,
             create_template_config,
+            import_postman_collection,
             start_file_watcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imports_postman_collection_as_http_file() {
+        let base =
+            std::env::temp_dir().join(format!("yacito-postman-import-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let collection = base.join("collection.postman_collection.json");
+        fs::write(
+            &collection,
+            r#"{
+              "info": { "name": "Notificador Manager" },
+              "item": [{
+                "name": "Enviar mensaje de whatsapp",
+                "event": [{
+                  "listen": "prerequest",
+                  "script": { "exec": ["pm.variables.set('routingKey', 'x')"] }
+                }],
+                "request": {
+                  "auth": {
+                    "type": "basic",
+                    "basic": [
+                      { "key": "username", "value": "myuser" },
+                      { "key": "password", "value": "mypassword" }
+                    ]
+                  },
+                  "method": "POST",
+                  "header": [],
+                  "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"routing_key\": \"{{routingKey}}\",\n  \"payload\": {{payloadString}}\n}",
+                    "options": { "raw": { "language": "json" } }
+                  },
+                  "url": {
+                    "raw": "http://localhost:15672/api/exchanges/%2F/eventos.negocio/publish"
+                  }
+                }
+              }]
+            }"#,
+        )
+        .unwrap();
+
+        let msg = import_postman_collection(
+            base.to_string_lossy().to_string(),
+            collection.to_string_lossy().to_string(),
+        )
+        .unwrap();
+        assert!(msg.contains("notificador-manager.http"));
+
+        let imported = fs::read_to_string(base.join("notificador-manager.http")).unwrap();
+        assert!(imported.contains("@postmanBasicUsername = myuser"));
+        assert!(imported.contains("@postmanBasicPassword = mypassword"));
+        assert!(imported.contains("@payloadString = TODO"));
+        assert!(imported.contains("@routingKey = TODO"));
+        assert!(imported
+            .contains("POST http://localhost:15672/api/exchanges/%2F/eventos.negocio/publish"));
+        assert!(imported
+            .contains("Authorization: Basic {{postmanBasicUsername}} {{postmanBasicPassword}}"));
+        assert!(imported.contains("# postman-script: pm.variables.set('routingKey', 'x')"));
+
+        fs::remove_dir_all(&base).unwrap();
+    }
 }

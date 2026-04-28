@@ -44,6 +44,10 @@ const dictionaries = {
     createConfig: 'Create Config',
     search: 'Search endpoints...',
     noSearchResults: 'No matching endpoints found.',
+    importPostman: 'Import Postman',
+    importingPostman: 'Importing…',
+    selectPostmanTitle: 'Select a Postman collection JSON',
+    importPostmanHint: 'Import a Postman collection as a .http file in the selected folder',
   },
   es: {
     appName: 'Yacito',
@@ -87,6 +91,10 @@ const dictionaries = {
     createConfig: 'Crear Config',
     search: 'Buscar endpoints...',
     noSearchResults: 'No se encontraron endpoints que coincidan.',
+    importPostman: 'Importar Postman',
+    importingPostman: 'Importando…',
+    selectPostmanTitle: 'Seleccionar colección JSON de Postman',
+    importPostmanHint: 'Importa una colección de Postman como archivo .http en la carpeta seleccionada',
   },
 } satisfies Record<Language, Record<string, string>>;
 

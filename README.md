@@ -38,6 +38,7 @@ If you prefer to do it yourself:
 ## ✨ Features
 
 - **Internal Generator**: Automatically generate `.http` files from OpenAPI specs. No external scripts required.
+- **Postman Import**: Convert simple Postman Collection JSON files into runnable `.http` files in your selected folder. Postman scripts are preserved as comments for safe manual conversion.
 - **Visual Feedback**: Real-time response visualization.
 - **Runes Powered**: Built with Svelte 5 for lightning-fast reactivity.
 - **Configurable UI**: Style variables based on OKLCH for consistent, beautiful themes.
@@ -63,6 +64,12 @@ To enable the internal generator, provide a `yacito.config.json` in your `.http`
 ```
 
 Yacito will fetch the OpenAPI specs and generate the corresponding `.http` files and `http-client.env.json` when you click **Sync**.
+
+## 📮 Postman Collection Import
+
+If a service does not expose Swagger/OpenAPI yet, you can import an exported Postman Collection instead. Select your `.http` folder in Yacito, click **Import Postman**, and choose a `*.postman_collection.json` file.
+
+Yacito writes the generated `.http` file into the currently selected folder, then refreshes the sidebar. Basic Auth, headers, raw bodies, folders, and `{{variables}}` are converted. Postman `pre-request`/`test` scripts use Postman's `pm.*` API, so they are preserved as comments with a TODO instead of being executed automatically. Convert those scripts manually to httpYac scripting before enabling them.
 
 ## 📦 Builds and Artifacts
 
