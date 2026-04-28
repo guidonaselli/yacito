@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Yacito standalone Tauri v2 + Svelte 5 + Rust backend.
+  Architecture: Yacito is a local desktop utility over user-selected folders containing httpyac .http files.
+  Testing: Svelte type checks via npm run check; Rust compile/test via cargo; no app-specific unit/e2e suite currently detected for Yacito.
+  Style: Minimal scoped changes, preserve .http/httpyac as source-of-truth, follow open-source, cross-platform, minimal-change rules.
+
+strict_tdd: false
+
+testing:
+  strict_tdd: false
+  detected: 2026-04-28
+  test_runner:
+    command: "npm run check; cargo test --manifest-path src-tauri/Cargo.toml"
+    framework: "svelte-check + Rust cargo test"
+  layers:
+    unit: "partial: cargo test available; no frontend unit runner configured"
+    integration: "not installed for Yacito"
+    e2e: "not installed for Yacito"
+  coverage: "not available"
+  quality:
+    type_checker: "npm run check"
+    formatter: "not configured"
+    linter: "not configured"
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords
+  design:
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+    - Preserve httpyac and .http files as the operational source of truth
+  verify:
+    - Run npm run check and cargo test/check for Yacito changes
