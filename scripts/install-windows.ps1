@@ -45,6 +45,9 @@ if (!(Test-Path $InstallDir)) {
 
 Set-Location $InstallDir
 
+Write-Host "🛑 Stopping any running instances of Yacito..."
+Get-Process -Name "Yacito", "yacito" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
 Write-Host "🚀 Building Yacito (Production)... This may take a few minutes." -ForegroundColor Cyan
 npm install
 npm run setup:httpyac
