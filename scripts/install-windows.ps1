@@ -67,7 +67,22 @@ try {
     Write-Host "⚠️ Could not create desktop shortcut, but build finished." -ForegroundColor Yellow
 }
 
+# Add persistent alias to PowerShell Profile
+try {
+    $ProfileDir = Split-Path $PROFILE -Parent
+    if (!(Test-Path $ProfileDir)) { New-Item -Path $ProfileDir -ItemType Directory -Force }
+    if (!(Test-Path $PROFILE)) { New-Item -Path $PROFILE -ItemType File -Force }
+    
+    $AliasLine = "function yacito { & '$ExePath' `$args }"
+    if (!(Select-String -Path $PROFILE -Pattern "function yacito")) {
+        Add-Content -Path $PROFILE -Value "`n$AliasLine"
+        Write-Host "✅ Alias 'yacito' added to your PowerShell Profile!" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "⚠️ Could not add alias to Profile, but you can still use the Desktop shortcut." -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "✨ Installation complete!" -ForegroundColor Green
 Write-Host "The productive version of Yacito is now on your Desktop."
-Write-Host "You can also run it by typing 'yacito' in your terminal (after restart)."
+Write-Host "Please RESTART your terminal to use the 'yacito' command."
