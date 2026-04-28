@@ -133,8 +133,8 @@ fn find_http_block(content: &str, name: &str) -> Option<String> {
 
     for line in content.lines() {
         let t = line.trim();
-        if t.starts_with("###") {
-            let current_name = t[3..].trim();
+        if let Some(stripped) = t.strip_prefix("###") {
+            let current_name = stripped.trim();
             if found {
                 break;
             }
@@ -234,7 +234,12 @@ fn load_services(api_http_dir: String) -> Vec<ServiceFile> {
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .filter(|p| p.extension().map(|x| x == "http").unwrap_or(false))
-            .filter(|p| !p.file_name().unwrap_or_default().to_string_lossy().starts_with("."))
+            .filter(|p| {
+                !p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .starts_with(".")
+            })
             .collect(),
         Err(_) => return vec![],
     };
@@ -283,7 +288,8 @@ fn get_request_detail(file: String, name: String) -> Result<RequestDetail, Strin
 fn command_candidates(command: &str) -> Vec<String> {
     #[cfg(windows)]
     {
-        let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        let pathext =
+            std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
         let mut candidates = Vec::new();
         // On Windows, prioritize files with executable extensions
         for ext in pathext.split(';').filter(|ext| !ext.is_empty()) {
@@ -350,10 +356,7 @@ fn find_httpyac() -> String {
                 .collect();
             vers.sort_by(|a, b| b.cmp(a));
             for v in vers {
-                for candidate in [
-                    "installation/bin/httpyac",
-                    "installation/bin/httpyac.cmd",
-                ] {
+                for candidate in ["installation/bin/httpyac", "installation/bin/httpyac.cmd"] {
                     if let Some(c) = existing_file(v.join(candidate)) {
                         return c;
                     }
@@ -361,7 +364,8 @@ fn find_httpyac() -> String {
             }
         }
 
-        if let Some(c) = existing_file(PathBuf::from(&home).join("AppData/Roaming/npm/httpyac.cmd")) {
+        if let Some(c) = existing_file(PathBuf::from(&home).join("AppData/Roaming/npm/httpyac.cmd"))
+        {
             return c;
         }
     }
@@ -381,8 +385,8 @@ fn find_python() -> String {
 
 #[tauri::command]
 fn get_workspace_capabilities(api_http_dir: String) -> WorkspaceCapabilities {
-    let generator_path = generator_script_from_api_http(&api_http_dir)
-        .map(|p| p.to_string_lossy().to_string());
+    let generator_path =
+        generator_script_from_api_http(&api_http_dir).map(|p| p.to_string_lossy().to_string());
     let internal_generator_available = get_config_from_api_http(&api_http_dir).is_some();
     WorkspaceCapabilities {
         generator_available: generator_path.is_some() || internal_generator_available,
@@ -552,7 +556,7 @@ fn execute_request(
 ) -> ExecuteResult {
     let parent = Path::new(&file).parent().unwrap_or(Path::new(""));
     let mut cmd = build_httpyac_cmd(parent);
-    
+
     cmd.arg("send")
         .arg(&file)
         .arg("--env")
@@ -598,8 +602,7 @@ fn execute_raw_request(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or_default();
-    let temp_file =
-        dir.join(format!(".yacito-{}-{millis}.http", std::process::id()));
+    let temp_file = dir.join(format!(".yacito-{}-{millis}.http", std::process::id()));
 
     if let Err(e) = fs::write(&temp_file, content) {
         return ExecuteResult {
@@ -654,8 +657,9 @@ fn run_generate_http_files(
         None => {
             return ExecuteResult {
                 stdout: String::new(),
-                stderr: "Generator not found (yacito.config.json or scripts/generate-http-files.py)"
-                    .to_string(),
+                stderr:
+                    "Generator not found (yacito.config.json or scripts/generate-http-files.py)"
+                        .to_string(),
                 exit_code: -1,
             };
         }
@@ -847,8 +851,11 @@ fn create_template_config(api_http_dir: String) -> Result<String, String> {
       ]
     });
 
-    fs::write(&config_path, serde_json::to_string_pretty(&default_config).unwrap())
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    fs::write(
+        &config_path,
+        serde_json::to_string_pretty(&default_config).unwrap(),
+    )
+    .map_err(|e| format!("Failed to write config: {}", e))?;
 
     Ok("Created yacito.config.json. You can now click Sync!".to_string())
 }
