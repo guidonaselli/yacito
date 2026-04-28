@@ -15,13 +15,22 @@ if (!(Get-Command rustc -ErrorAction SilentlyContinue)) {
     Write-Host "✓ Rust already installed"
 }
 
-# Node.js
-if (!(Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "📦 Installing Node.js LTS..."
-    winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+# Check for Git
+if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "📦 Installing Git..."
+    winget install Git.Git --accept-source-agreements --accept-package-agreements
 } else {
-    Write-Host "✓ Node.js already installed"
+    Write-Host "✓ Git already installed"
 }
+
+# Clone the repository
+$InstallDir = Join-Path $HOME "yacito"
+if (!(Test-Path $InstallDir)) {
+    Write-Host "📂 Cloning Yacito into $InstallDir..."
+    git clone https://github.com/guidonaselli/yacito "$InstallDir"
+}
+
+Set-Location $InstallDir
 
 Write-Host "🚀 Building Yacito (Production)... This may take a few minutes." -ForegroundColor Cyan
 npm install

@@ -18,11 +18,20 @@ else
     echo "✓ Rust already installed"
 fi
 
-# Node.js check
-if ! command -v node &> /dev/null; then
-    echo "❌ Node.js not found. Please install it using your preferred method (e.g., nvm)."
-    exit 1
+# Check for Git
+if ! command -v git &> /dev/null; then
+    echo "📦 Installing Git..."
+    sudo apt update && sudo apt install -y git
 fi
+
+# Clone the repository
+INSTALL_DIR="$HOME/yacito"
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "📂 Cloning Yacito into $INSTALL_DIR..."
+    git clone https://github.com/guidonaselli/yacito "$INSTALL_DIR"
+fi
+
+cd "$INSTALL_DIR"
 
 # Project setup
 echo "🚀 Building Yacito (Production)..."
