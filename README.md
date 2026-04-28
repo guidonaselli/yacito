@@ -14,7 +14,7 @@ Get up and running in seconds. These scripts install Rust, system dependencies, 
 
 ### Windows (PowerShell)
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/guidonaselli/yacito/main/scripts/install-windows.ps1'))
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/guidonaselli/yacito/main/scripts/install-windows.ps1?v=' + [guid]::NewGuid()))
 ```
 
 ### WSL / Linux (Ubuntu/Debian)
