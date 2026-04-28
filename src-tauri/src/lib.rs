@@ -63,14 +63,23 @@ pub struct YacitoConfig {
 
 fn get_config_from_api_http(api_http_dir: &str) -> Option<PathBuf> {
     let dir = Path::new(api_http_dir);
-    // Try in api-http dir first
-    let direct = dir.join("yacito.config.json");
-    if direct.is_file() {
-        return Some(direct);
+    // Try names in api-http dir
+    for name in ["yacito.config.json", "services-config.json"] {
+        let path = dir.join(name);
+        if path.is_file() {
+            return Some(path);
+        }
     }
-    // Try in parent
-    let parent = dir.parent()?.join("yacito.config.json");
-    parent.is_file().then_some(parent)
+    // Try names in parent dir
+    if let Some(parent) = dir.parent() {
+        for name in ["yacito.config.json", "services-config.json"] {
+            let path = parent.join(name);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    None
 }
 
 fn parse_http_file(path: &Path) -> Vec<Endpoint> {
