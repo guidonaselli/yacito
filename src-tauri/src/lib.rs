@@ -509,6 +509,34 @@ fn generate_http_block(
     lines.join("\n")
 }
 
+fn build_httpyac_cmd(dir: &Path) -> Command {
+    let httpyac = find_httpyac();
+
+    #[cfg(windows)]
+    {
+        if dir.to_string_lossy().starts_with(r"\\") {
+            let mut cmd = Command::new("powershell.exe");
+            cmd.arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-Command");
+
+            let ps_command = format!(
+                "Set-Location -LiteralPath '{}'; & '{}'",
+                dir.to_string_lossy().replace("'", "''"),
+                httpyac.replace("'", "''")
+            );
+            cmd.arg(&ps_command);
+            return cmd;
+        }
+    }
+
+    let mut cmd = Command::new(&httpyac);
+    cmd.current_dir(dir);
+    cmd
+}
+
 #[tauri::command]
 fn execute_request(
     file: String,
@@ -516,8 +544,9 @@ fn execute_request(
     name: String,
     token: Option<String>,
 ) -> ExecuteResult {
-    let httpyac = find_httpyac();
-    let mut cmd = Command::new(&httpyac);
+    let parent = Path::new(&file).parent().unwrap_or(Path::new(""));
+    let mut cmd = build_httpyac_cmd(parent);
+    
     cmd.arg("send")
         .arg(&file)
         .arg("--env")
@@ -529,10 +558,6 @@ fn execute_request(
         cmd.env("token", t);
     }
 
-    if let Some(parent) = Path::new(&file).parent() {
-        cmd.current_dir(parent);
-    }
-
     match cmd.output() {
         Ok(o) => ExecuteResult {
             stdout: String::from_utf8_lossy(&o.stdout).to_string(),
@@ -541,7 +566,7 @@ fn execute_request(
         },
         Err(e) => ExecuteResult {
             stdout: String::new(),
-            stderr: format!("Failed to run httpyac ({}): {}", httpyac, e),
+            stderr: format!("Failed to run httpyac: {}", e),
             exit_code: -1,
         },
     }
@@ -578,10 +603,8 @@ fn execute_raw_request(
         };
     }
 
-    let httpyac = find_httpyac();
-    let mut cmd = Command::new(&httpyac);
-    cmd.current_dir(dir)
-        .arg("send")
+    let mut cmd = build_httpyac_cmd(dir);
+    cmd.arg("send")
         .arg(&temp_file)
         .arg("--env")
         .arg(&env);
@@ -598,7 +621,7 @@ fn execute_raw_request(
         },
         Err(e) => ExecuteResult {
             stdout: String::new(),
-            stderr: format!("Failed to run httpyac ({}): {}", httpyac, e),
+            stderr: format!("Failed to run httpyac: {}", e),
             exit_code: -1,
         },
     };
