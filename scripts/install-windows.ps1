@@ -23,29 +23,34 @@ if (!(Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "✓ Node.js already installed"
 }
 
-Write-Host "🚀 Setting up project..."
+Write-Host "🚀 Building Yacito (Production)... This may take a few minutes." -ForegroundColor Cyan
 npm install
 npm run setup:httpyac
+npm run build:app
 
 # Create Desktop Shortcut
 try {
+    $ExePath = Join-Path $PWD "src-tauri\target\release\yacito.exe"
+    if (!(Test-Path $ExePath)) {
+        # Fallback for different tauri build patterns if necessary
+        $ExePath = (Get-ChildItem -Path "src-tauri\target\release\*.exe" | Select-Object -First 1).FullName
+    }
+
     $DesktopPath = [Environment]::GetFolderPath("Desktop")
-    $ShortcutPath = Join-Path $DesktopPath "Yacito Dev.lnk"
+    $ShortcutPath = Join-Path $DesktopPath "Yacito.lnk"
     $WshShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-    # Launch via powershell to keep context, but could also point to a .bat
-    $Shortcut.TargetPath = "powershell.exe"
-    $Shortcut.Arguments = "-NoExit -Command `"cd '$PWD'; npm run dev:app`""
+    $Shortcut.TargetPath = $ExePath
     $Shortcut.WorkingDirectory = $PWD
     $Shortcut.Description = "Yacito - Baby-easy httpYac GUI"
     $Shortcut.IconLocation = Join-Path $PWD "static\favicon.png"
     $Shortcut.Save()
-    Write-Host "✅ Desktop shortcut 'Yacito Dev' created!" -ForegroundColor Green
+    Write-Host "✅ Desktop shortcut 'Yacito' created!" -ForegroundColor Green
 } catch {
-    Write-Host "⚠️ Could not create desktop shortcut, but installation finished." -ForegroundColor Yellow
+    Write-Host "⚠️ Could not create desktop shortcut, but build finished." -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "✨ Installation complete!" -ForegroundColor Green
-Write-Host "IMPORTANT: You might need to RESTART your terminal for PATH changes to take effect." -ForegroundColor Yellow
-Write-Host "Then run 'yacito' (if you added the alias) or use the Desktop shortcut."
+Write-Host "The productive version of Yacito is now on your Desktop."
+Write-Host "You can also run it by typing 'yacito' in your terminal (after restart)."

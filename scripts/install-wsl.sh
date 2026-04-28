@@ -25,17 +25,20 @@ if ! command -v node &> /dev/null; then
 fi
 
 # Project setup
-echo "🚀 Setting up project..."
+echo "🚀 Building Yacito (Production)..."
 npm install
 npm run setup:httpyac
+npm run build:app
 
-# Add alias
+# Add alias to the production binary
+BINARY_PATH="$PWD/src-tauri/target/release/yacito"
 if ! grep -q "alias yacito=" ~/.bashrc; then
-    echo "alias yacito='cd $PWD && npm run dev:app'" >> ~/.bashrc
+    echo "alias yacito='$BINARY_PATH'" >> ~/.bashrc
     echo "✅ Alias 'yacito' added to ~/.bashrc"
 fi
 
 echo ""
 echo "✨ Installation complete!"
+echo "The productive version of Yacito is ready."
 echo "Please RESTART your terminal or run 'source ~/.bashrc'."
 echo "Then, you can start the app by simply typing: yacito"
