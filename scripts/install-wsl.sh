@@ -29,6 +29,10 @@ INSTALL_DIR="$HOME/yacito"
 if [ ! -d "$INSTALL_DIR" ]; then
     echo "📂 Cloning Yacito into $INSTALL_DIR..."
     git clone https://github.com/guidonaselli/yacito "$INSTALL_DIR"
+else
+    echo "🔄 Updating existing Yacito repository..."
+    cd "$INSTALL_DIR"
+    git pull origin main
 fi
 
 cd "$INSTALL_DIR"

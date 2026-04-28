@@ -36,6 +36,10 @@ $InstallDir = Join-Path $HOME "yacito"
 if (!(Test-Path $InstallDir)) {
     Write-Host "📂 Cloning Yacito into $InstallDir..."
     git clone https://github.com/guidonaselli/yacito "$InstallDir"
+} else {
+    Write-Host "🔄 Updating existing Yacito repository..."
+    Set-Location $InstallDir
+    git pull origin main
 }
 
 Set-Location $InstallDir
