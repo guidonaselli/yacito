@@ -29,6 +29,13 @@ echo "🚀 Setting up project..."
 npm install
 npm run setup:httpyac
 
+# Add alias
+if ! grep -q "alias yacito=" ~/.bashrc; then
+    echo "alias yacito='cd $PWD && npm run dev:app'" >> ~/.bashrc
+    echo "✅ Alias 'yacito' added to ~/.bashrc"
+fi
+
 echo ""
 echo "✨ Installation complete!"
-echo "Run 'npm run dev:app' to start Yacito."
+echo "Please RESTART your terminal or run 'source ~/.bashrc'."
+echo "Then, you can start the app by simply typing: yacito"
