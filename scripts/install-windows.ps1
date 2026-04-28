@@ -15,6 +15,14 @@ if (!(Get-Command rustc -ErrorAction SilentlyContinue)) {
     Write-Host "✓ Rust already installed"
 }
 
+# Node.js
+if (!(Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Host "📦 Installing Node.js LTS..."
+    winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+} else {
+    Write-Host "✓ Node.js already installed"
+}
+
 # Check for Git
 if (!(Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "📦 Installing Git..."
