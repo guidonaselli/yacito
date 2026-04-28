@@ -36,10 +36,41 @@ pub struct RequestDetail {
     pub content: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceCapabilities {
     pub generator_available: bool,
     pub generator_path: Option<String>,
+    pub internal_generator_available: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct YacitoServiceConfig {
+    pub name: String,
+    #[serde(rename = "localPort")]
+    pub local_port: u16,
+    #[serde(rename = "dockerPort")]
+    pub docker_port: u16,
+    #[serde(rename = "hostVar")]
+    pub host_var: String,
+    #[serde(rename = "openapiPath")]
+    pub openapi_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct YacitoConfig {
+    pub services: Vec<YacitoServiceConfig>,
+}
+
+fn get_config_from_api_http(api_http_dir: &str) -> Option<PathBuf> {
+    let dir = Path::new(api_http_dir);
+    // Try in api-http dir first
+    let direct = dir.join("yacito.config.json");
+    if direct.is_file() {
+        return Some(direct);
+    }
+    // Try in parent
+    let parent = dir.parent()?.join("yacito.config.json");
+    parent.is_file().then_some(parent)
 }
 
 fn parse_http_file(path: &Path) -> Vec<Endpoint> {
@@ -340,10 +371,131 @@ fn find_python() -> String {
 fn get_workspace_capabilities(api_http_dir: String) -> WorkspaceCapabilities {
     let generator_path = generator_script_from_api_http(&api_http_dir)
         .map(|p| p.to_string_lossy().to_string());
+    let internal_generator_available = get_config_from_api_http(&api_http_dir).is_some();
     WorkspaceCapabilities {
-        generator_available: generator_path.is_some(),
+        generator_available: generator_path.is_some() || internal_generator_available,
         generator_path,
+        internal_generator_available,
     }
+}
+
+fn resolve_ref<'a>(ref_path: &str, spec: &'a serde_json::Value) -> Option<&'a serde_json::Value> {
+    if !ref_path.starts_with("#/") {
+        return None;
+    }
+    let parts = ref_path.trim_start_matches("#/").split('/');
+    let mut node = spec;
+    for part in parts {
+        node = node.get(part)?;
+    }
+    Some(node)
+}
+
+fn generate_example_body(
+    schema: &serde_json::Value,
+    spec: &serde_json::Value,
+    depth: u32,
+) -> serde_json::Value {
+    if depth > 5 {
+        return serde_json::Value::Null;
+    }
+
+    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
+        if let Some(resolved) = resolve_ref(ref_path, spec) {
+            return generate_example_body(resolved, spec, depth + 1);
+        }
+    }
+
+    if let Some(example) = schema.get("example") {
+        return example.clone();
+    }
+
+    let schema_type = schema
+        .get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("object");
+
+    match schema_type {
+        "object" => {
+            let mut obj = serde_json::Map::new();
+            if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
+                for (name, prop_schema) in props {
+                    let val = generate_example_body(prop_schema, spec, depth + 1);
+                    obj.insert(name.clone(), val);
+                }
+            }
+            serde_json::Value::Object(obj)
+        }
+        "array" => {
+            if let Some(items) = schema.get("items") {
+                serde_json::Value::Array(vec![generate_example_body(items, spec, depth + 1)])
+            } else {
+                serde_json::Value::Array(vec![])
+            }
+        }
+        "string" => serde_json::Value::String("string".to_string()),
+        "integer" | "number" => serde_json::Value::Number(0.into()),
+        "boolean" => serde_json::Value::Bool(true),
+        _ => serde_json::Value::Null,
+    }
+}
+
+fn generate_http_block(
+    method: &str,
+    path: &str,
+    operation: &serde_json::Value,
+    host_var: &str,
+    spec: &serde_json::Value,
+) -> String {
+    let method_upper = method.to_uppercase();
+    let summary = operation
+        .get("summary")
+        .or_else(|| operation.get("operationId"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let description = if summary.is_empty() {
+        String::new()
+    } else {
+        format!(" - {summary}")
+    };
+
+    let mut lines = Vec::new();
+    lines.push(format!("### {method_upper} {path}{description}"));
+    lines.push(format!("{method_upper} http://{{{{{host_var}}}}}{path}"));
+
+    let is_login = path.to_lowercase().contains("login");
+    if !is_login {
+        lines.push("Authorization: Bearer {{token}}".to_string());
+    }
+
+    let has_body = matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH");
+    if has_body {
+        lines.push("Content-Type: application/json".to_string());
+    }
+
+    lines.push(String::new());
+
+    if has_body {
+        let mut body_found = false;
+        if let Some(content) = operation.get("requestBody").and_then(|b| b.get("content")) {
+            for media_type in ["application/json", "*/*"] {
+                if let Some(schema) = content.get(media_type).and_then(|c| c.get("schema")) {
+                    let body = generate_example_body(schema, spec, 0);
+                    lines.push(
+                        serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_string()),
+                    );
+                    body_found = true;
+                    break;
+                }
+            }
+        }
+        if !body_found {
+            lines.push("{}".to_string());
+        }
+        lines.push(String::new());
+    }
+
+    lines.join("\n")
 }
 
 #[tauri::command]
@@ -450,45 +602,34 @@ fn run_generate_http_files(
     env: String,
     service: Option<String>,
 ) -> ExecuteResult {
-    if env != "local" && env != "docker" {
-        return ExecuteResult {
-            stdout: String::new(),
-            stderr: format!("Invalid generator env '{env}'. Expected 'local' or 'docker'."),
-            exit_code: -1,
-        };
+    // Try internal generator first if config exists
+    if let Some(config_path) = get_config_from_api_http(&api_http_dir) {
+        return run_internal_generator(&api_http_dir, config_path, &env, service);
     }
 
+    // Legacy: external script
     let script = match generator_script_from_api_http(&api_http_dir) {
         Some(s) => s,
         None => {
-            let root_hint = get_repo_root_from_api_http(&api_http_dir)
-                .map(|p| p.join("scripts/generate-http-files.py").to_string_lossy().to_string())
-                .unwrap_or_else(|_| "scripts/generate-http-files.py".to_string());
             return ExecuteResult {
                 stdout: String::new(),
-                stderr: format!("Generator script not found: {root_hint}"),
+                stderr: "Generator not found (yacito.config.json or scripts/generate-http-files.py)"
+                    .to_string(),
                 exit_code: -1,
             };
         }
     };
+
     let repo_root = match script.parent().and_then(|p| p.parent()) {
         Some(p) => p.to_path_buf(),
         None => {
             return ExecuteResult {
                 stdout: String::new(),
-                stderr: format!("Invalid generator script path: {}", script.to_string_lossy()),
+                stderr: "Invalid script path".to_string(),
                 exit_code: -1,
-            };
+            }
         }
     };
-
-    if !script.is_file() {
-        return ExecuteResult {
-            stdout: String::new(),
-            stderr: format!("Generator script not found: {}", script.to_string_lossy()),
-            exit_code: -1,
-        };
-    }
 
     let mut cmd = Command::new(find_python());
     cmd.current_dir(&repo_root)
@@ -496,10 +637,7 @@ fn run_generate_http_files(
         .arg("--env")
         .arg(&env);
 
-    if let Some(s) = service
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(s) = service.filter(|s| !s.trim().is_empty()) {
         cmd.arg(s);
     }
 
@@ -511,13 +649,137 @@ fn run_generate_http_files(
         },
         Err(e) => ExecuteResult {
             stdout: String::new(),
-            stderr: format!(
-                "Failed to run generator ({}): {}",
-                script.to_string_lossy(),
-                e
-            ),
+            stderr: format!("Failed to run external generator: {e}"),
             exit_code: -1,
         },
+    }
+}
+
+fn run_internal_generator(
+    api_http_dir: &str,
+    config_path: PathBuf,
+    env_name: &str,
+    target_service: Option<String>,
+) -> ExecuteResult {
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return ExecuteResult {
+                stdout: String::new(),
+                stderr: format!("Failed to read config: {e}"),
+                exit_code: -1,
+            }
+        }
+    };
+    let config: YacitoConfig = match serde_json::from_str(&config_content) {
+        Ok(c) => c,
+        Err(e) => {
+            return ExecuteResult {
+                stdout: String::new(),
+                stderr: format!("Invalid config JSON: {e}"),
+                exit_code: -1,
+            }
+        }
+    };
+
+    let mut success_count = 0;
+    let mut skip_count = 0;
+    let mut logs = Vec::new();
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap();
+
+    for svc in &config.services {
+        if let Some(target) = &target_service {
+            if &svc.name != target {
+                continue;
+            }
+        }
+
+        let port = if env_name == "local" {
+            svc.local_port
+        } else {
+            svc.docker_port
+        };
+        let url = format!("http://localhost:{}{}", port, svc.openapi_path);
+
+        logs.push(format!(
+            "\n[{}] Fetching OpenAPI spec from {}...",
+            svc.name, url
+        ));
+
+        let spec: serde_json::Value = match client.get(&url).send().and_then(|r| r.json()) {
+            Ok(s) => s,
+            Err(e) => {
+                logs.push(format!("  [WARN] Failed to fetch spec: {e}"));
+                skip_count += 1;
+                continue;
+            }
+        };
+
+        let mut blocks = Vec::new();
+        let title = spec
+            .get("info")
+            .and_then(|i| i.get("title"))
+            .and_then(|t| t.as_str())
+            .unwrap_or(&svc.name);
+        blocks.push(format!("# {title}"));
+        blocks.push("# Generated by Yacito Internal Generator".to_string());
+        blocks.push(String::new());
+
+        if let Some(paths) = spec.get("paths").and_then(|p| p.as_object()) {
+            let mut path_keys: Vec<_> = paths.keys().collect();
+            path_keys.sort();
+            for path in path_keys {
+                if let Some(methods) = paths.get(path).and_then(|m| m.as_object()) {
+                    for method in ["get", "post", "put", "patch", "delete"] {
+                        if let Some(operation) = methods.get(method) {
+                            blocks.push(generate_http_block(
+                                method,
+                                path,
+                                operation,
+                                &svc.host_var,
+                                &spec,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        let output_path = Path::new(api_http_dir).join(format!("{}.http", svc.name));
+        if let Err(e) = fs::write(&output_path, blocks.join("\n")) {
+            logs.push(format!("  [ERR] Failed to write file: {e}"));
+            skip_count += 1;
+        } else {
+            logs.push(format!("  [OK] Generated {}.http", svc.name));
+            success_count += 1;
+        }
+    }
+
+    // Generate env file
+    let mut envs = serde_json::json!({
+        "local": { "token": "" },
+        "docker": { "token": "" }
+    });
+    for svc in &config.services {
+        envs["local"][&svc.host_var] = serde_json::json!(format!("localhost:{}", svc.local_port));
+        envs["docker"][&svc.host_var] = serde_json::json!(format!("localhost:{}", svc.docker_port));
+    }
+    let env_path = Path::new(api_http_dir).join("http-client.env.json");
+    let _ = fs::write(env_path, serde_json::to_string_pretty(&envs).unwrap());
+
+    ExecuteResult {
+        stdout: format!(
+            "{}\n\nSummary: {} generated, {} skipped.",
+            logs.join("\n"),
+            success_count,
+            skip_count
+        ),
+        stderr: String::new(),
+        exit_code: 0,
     }
 }
 

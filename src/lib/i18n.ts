@@ -40,7 +40,7 @@ const dictionaries = {
     ok: 'OK',
     exit: 'exit {code}',
     generatorUnavailable: 'Generator not detected',
-    generatorHint: 'Open a folder whose parent has scripts/generate-http-files.py to enable Resync',
+    generatorHint: 'Provide a yacito.config.json or scripts/generate-http-files.py to enable Resync',
   },
   es: {
     appName: 'Yacito',
@@ -80,7 +80,7 @@ const dictionaries = {
     ok: 'OK',
     exit: 'exit {code}',
     generatorUnavailable: 'Generador no detectado',
-    generatorHint: 'Abrí una carpeta cuyo padre tenga scripts/generate-http-files.py para habilitar Resync',
+    generatorHint: 'Provee un yacito.config.json o scripts/generate-http-files.py para habilitar Resync',
   },
 } satisfies Record<Language, Record<string, string>>;
 

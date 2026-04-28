@@ -52,9 +52,16 @@
   let loadingRequest = $state(false);
   let choosingDir = $state(false);
   let language = $state<Language>('en');
+  interface WorkspaceCapabilities {
+    generator_available: boolean;
+    generator_path: string | null;
+    internal_generator_available: boolean;
+  }
+
   let capabilities = $state<WorkspaceCapabilities>({
     generator_available: false,
     generator_path: null,
+    internal_generator_available: false,
   });
 
   function t(key: TranslationKey, params: Record<string, string | number> = {}) {

@@ -33,11 +33,32 @@ If you prefer to do it yourself:
 
 ## ✨ Features
 
+- **Internal Generator**: Automatically generate `.http` files from OpenAPI specs. No external scripts required.
 - **Visual Feedback**: Real-time response visualization.
 - **Runes Powered**: Built with Svelte 5 for lightning-fast reactivity.
 - **Configurable UI**: Style variables based on OKLCH for consistent, beautiful themes.
 - **i18n Support**: Available in English and Spanish.
 - **Baby-Easy**: No steep learning curves. Just open your `.http` files and start requesting.
+
+## ⚙️ Internal Generator
+
+To enable the internal generator, provide a `yacito.config.json` in your `.http` folder or its parent:
+
+```json
+{
+  "services": [
+    {
+      "name": "auth-manager",
+      "localPort": 8099,
+      "dockerPort": 5000,
+      "hostVar": "authManager",
+      "openapiPath": "/v3/api-docs"
+    }
+  ]
+}
+```
+
+Yacito will fetch the OpenAPI specs and generate the corresponding `.http` files and `http-client.env.json` when you click **Sync**.
 
 ## 📦 Building for Production
 
