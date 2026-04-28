@@ -42,6 +42,8 @@ const dictionaries = {
     generatorUnavailable: 'Generator not detected',
     generatorHint: 'Provide a yacito.config.json or scripts/generate-http-files.py to enable Resync',
     createConfig: 'Create Config',
+    search: 'Search endpoints...',
+    noSearchResults: 'No matching endpoints found.',
   },
   es: {
     appName: 'Yacito',
@@ -83,6 +85,8 @@ const dictionaries = {
     generatorUnavailable: 'Generador no detectado',
     generatorHint: 'Provee un yacito.config.json o scripts/generate-http-files.py para habilitar Resync',
     createConfig: 'Crear Config',
+    search: 'Buscar endpoints...',
+    noSearchResults: 'No se encontraron endpoints que coincidan.',
   },
 } satisfies Record<Language, Record<string, string>>;
 

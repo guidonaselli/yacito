@@ -52,6 +52,8 @@
   let loadingRequest = $state(false);
   let choosingDir = $state(false);
   let language = $state<Language>('en');
+  let searchQuery = $state('');
+
   interface WorkspaceCapabilities {
     generator_available: boolean;
     generator_path: string | null;
@@ -63,6 +65,20 @@
     generator_path: null,
     internal_generator_available: false,
   });
+
+  let filteredServices = $derived(
+    services.map(svc => {
+      if (!searchQuery) return svc;
+      const q = searchQuery.toLowerCase();
+      if (svc.service.toLowerCase().includes(q)) return svc;
+      const filteredEndpoints = svc.endpoints.filter(ep => 
+        ep.path.toLowerCase().includes(q) || 
+        ep.name.toLowerCase().includes(q) || 
+        ep.method.toLowerCase().includes(q)
+      );
+      return { ...svc, endpoints: filteredEndpoints };
+    }).filter(svc => svc.endpoints.length > 0)
+  );
 
   function t(key: TranslationKey, params: Record<string, string | number> = {}) {
     return translate(language, key, params);
@@ -362,19 +378,26 @@
 
   <main>
     <aside>
+      {#if apiHttpDir && services.length > 0}
+        <div class="search-box">
+          <input type="text" bind:value={searchQuery} placeholder={t('search')} />
+        </div>
+      {/if}
       {#if !apiHttpDir}
         <div class="hint">{t('notFound')}</div>
       {:else if services.length === 0}
         <div class="hint">{t('noHttpFiles')}<br/><code>{apiHttpDir}</code></div>
+      {:else if filteredServices.length === 0}
+        <div class="hint">{t('noSearchResults')}</div>
       {/if}
-      {#each services as svc}
+      {#each filteredServices as svc}
         <div class="svc-block">
           <button class="svc-btn" onclick={() => toggle(svc.service)}>
-            <span class="chevron">{expanded.has(svc.service) ? '▾' : '▸'}</span>
+            <span class="chevron">{expanded.has(svc.service) || searchQuery ? '▾' : '▸'}</span>
             {svc.service}
             <span class="badge">{svc.endpoints.length}</span>
           </button>
-          {#if expanded.has(svc.service)}
+          {#if expanded.has(svc.service) || searchQuery}
             {#each svc.endpoints as ep}
               <button
                 class="ep-btn"
@@ -644,6 +667,20 @@
     overflow-y: auto;
     flex-shrink: 0;
     padding: 16px 8px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .search-box {
+    margin: 0 8px 16px 8px;
+    flex-shrink: 0;
+  }
+  .search-box input {
+    width: 100%;
+    border-radius: var(--radius-lg);
+    padding: 10px 16px;
+    font-size: 13px;
+    background-color: var(--color-bg);
   }
 
   .hint { padding: 32px 24px; color: var(--color-text-dim); font-size: 13px; line-height: 1.6; text-align: center; }
