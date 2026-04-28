@@ -39,7 +39,8 @@ if (!(Test-Path $InstallDir)) {
 } else {
     Write-Host "🔄 Updating existing Yacito repository..."
     Set-Location $InstallDir
-    git pull origin main
+    git fetch origin
+    git reset --hard origin/main
 }
 
 Set-Location $InstallDir

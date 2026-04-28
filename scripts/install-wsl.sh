@@ -32,7 +32,8 @@ if [ ! -d "$INSTALL_DIR" ]; then
 else
     echo "🔄 Updating existing Yacito repository..."
     cd "$INSTALL_DIR"
-    git pull origin main
+    git fetch origin
+    git reset --hard origin/main
 fi
 
 cd "$INSTALL_DIR"
