@@ -44,16 +44,16 @@
   function parseOutput(stdout: string) {
     if (!stdout) return { trace: '', body: '' };
     
-    const summaryRegex = /\n\d+ requests processed.*\n?$/;
+    const summaryRegex = /\r?\n\d+ requests processed.*\r?\n?$/;
     let text = stdout.replace(summaryRegex, '').trim();
     
-    const statusMatch = text.match(/HTTP\/\d\.\d\s+\d{3}.*\n/g);
+    const statusMatch = text.match(/HTTP\/\d\.\d\s+\d{3}.*(?:\r?\n|$)/g);
     if (statusMatch && statusMatch.length > 0) {
       const lastStatus = statusMatch[statusMatch.length - 1];
       const statusIdx = text.lastIndexOf(lastStatus);
       
       const afterStatus = text.substring(statusIdx);
-      const splitIdx = afterStatus.search(/\n\r?\n|\r\n\r\n/);
+      const splitIdx = afterStatus.search(/\r?\n\r?\n/);
       
       if (splitIdx !== -1) {
         const reqTrace = text.substring(0, statusIdx + splitIdx).trim();
