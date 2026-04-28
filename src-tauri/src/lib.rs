@@ -283,11 +283,13 @@ fn command_candidates(command: &str) -> Vec<String> {
     #[cfg(windows)]
     {
         let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
-        let mut candidates = vec![command.to_string()];
+        let mut candidates = Vec::new();
+        // On Windows, prioritize files with executable extensions
         for ext in pathext.split(';').filter(|ext| !ext.is_empty()) {
             candidates.push(format!("{command}{ext}"));
             candidates.push(format!("{command}{}", ext.to_ascii_lowercase()));
         }
+        candidates.push(command.to_string());
         candidates
     }
 
