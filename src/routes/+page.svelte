@@ -835,7 +835,7 @@
     padding: 6px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-dim);
   }
   .trace-label:first-child { border-top: none; }
-  .trace-out { color: var(--color-text-dim); flex: 0 1 auto; max-height: 250px; background: oklch(98% 0.005 220); }
+  .trace-out { color: var(--color-text-dim); flex: 0 0 auto; height: 120px; min-height: 40px; max-height: 60vh; background: oklch(98% 0.005 220); resize: vertical; overflow: auto; margin-bottom: 0; padding-bottom: 8px; }
 
   .sync-log { margin: 0 32px 24px; max-height: 260px; flex-shrink: 0; }
   .sync-log .out { max-height: 200px; flex: 0 1 auto; }
