@@ -612,6 +612,7 @@ fn execute_raw_request(
     let mut cmd = build_httpyac_cmd(dir);
     cmd.arg("send")
         .arg(&temp_file)
+        .arg("--all")
         .arg("--env")
         .arg(&env);
 
