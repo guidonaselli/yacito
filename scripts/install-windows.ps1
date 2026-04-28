@@ -47,22 +47,28 @@ npm run build:app
 
 # Create Desktop Shortcut
 try {
-    $ExePath = Join-Path $PWD "src-tauri\target\release\yacito.exe"
+    # Tauri uses productName for the executable name
+    $ExePath = Join-Path $PWD "src-tauri\target\release\Yacito.exe"
     if (!(Test-Path $ExePath)) {
-        # Fallback for different tauri build patterns if necessary
+        # Fallback: search for any exe in release folder if productName didn't match
         $ExePath = (Get-ChildItem -Path "src-tauri\target\release\*.exe" | Select-Object -First 1).FullName
     }
 
-    $DesktopPath = [Environment]::GetFolderPath("Desktop")
-    $ShortcutPath = Join-Path $DesktopPath "Yacito.lnk"
-    $WshShell = New-Object -ComObject WScript.Shell
-    $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-    $Shortcut.TargetPath = $ExePath
-    $Shortcut.WorkingDirectory = $PWD
-    $Shortcut.Description = "Yacito - Baby-easy httpYac GUI"
-    $Shortcut.IconLocation = Join-Path $PWD "static\favicon.png"
-    $Shortcut.Save()
-    Write-Host "✅ Desktop shortcut 'Yacito' created!" -ForegroundColor Green
+    if ($ExePath) {
+        $DesktopPath = [Environment]::GetFolderPath("Desktop")
+        $ShortcutPath = Join-Path $DesktopPath "Yacito.lnk"
+        $WshShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+        $Shortcut.TargetPath = $ExePath
+        $Shortcut.WorkingDirectory = $PWD
+        $Shortcut.Description = "Yacito - Baby-easy httpYac GUI"
+        # Use the EXE itself for the icon, index 0 is the primary app icon
+        $Shortcut.IconLocation = "$ExePath,0"
+        $Shortcut.Save()
+        Write-Host "✅ Desktop shortcut 'Yacito' created!" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️ Could not find the Yacito executable to create a shortcut." -ForegroundColor Yellow
+    }
 } catch {
     Write-Host "⚠️ Could not create desktop shortcut, but build finished." -ForegroundColor Yellow
 }
