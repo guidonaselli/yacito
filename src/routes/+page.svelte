@@ -538,162 +538,62 @@
   }
   .folder-field input { width: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; }
 
+  /* Accessibility: Focus States */
+  :global(*:focus-visible) {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Smooth Transitions */
+  button, select, input, .ep-btn {
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
   select, input[type="text"], input[type="password"] {
     background-color: var(--color-surface-alt);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     color: var(--color-text);
-    padding: 6px 10px;
+    padding: 6px 12px;
     font-size: 13px;
     outline: none;
-    transition: all 0.2s ease;
   }
   select:focus, input:focus { 
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px oklch(var(--color-primary) / 0.1);
+    background-color: var(--color-surface);
+    box-shadow: 0 0 0 3px oklch(var(--color-primary) / 0.15);
   }
 
-  .token-wrap { display: flex; align-items: stretch; }
-  .token-wrap input { width: 180px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-  .toggle-vis {
-    background: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-left: none;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    padding: 0 10px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-  }
-
-  main { display: flex; flex: 1; overflow: hidden; }
-
-  aside {
-    width: 280px; min-width: 200px;
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
-    overflow-y: auto;
-    flex-shrink: 0;
-    padding: 12px 0;
-  }
-
-  .hint { padding: 24px; color: var(--color-text-dim); font-size: 13px; line-height: 1.5; text-align: center; }
-  .hint code { font-size: 11px; color: var(--color-primary); background: var(--color-bg); padding: 2px 4px; border-radius: 4px; }
-
-  .svc-block { margin-bottom: 4px; }
-  .svc-btn {
-    display: flex; align-items: center; gap: 8px; width: 100%;
-    padding: 10px 16px; background: none; border: none;
-    color: var(--color-text); cursor: pointer; font-size: 14px; font-weight: 600; text-align: left;
-    transition: background 0.2s;
-  }
-  .svc-btn:hover { background: var(--color-bg); }
-  .chevron { font-size: 12px; color: var(--color-text-dim); width: 16px; text-align: center; }
-  .badge {
-    margin-left: auto; font-size: 11px; color: var(--color-text-dim);
-    background: var(--color-surface-alt); border-radius: 10px; padding: 1px 8px;
-  }
-
-  .ep-btn {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    padding: 8px 16px 8px 40px; background: none; border: none;
-    color: var(--color-text-dim); cursor: pointer; font-size: 13px; text-align: left;
-    transition: all 0.2s;
-  }
-  .ep-btn:hover { background: var(--color-bg); color: var(--color-text); }
-  .ep-btn.active { 
-    background: oklch(var(--color-primary) / 0.1); 
-    color: var(--color-primary);
-    font-weight: 500;
-  }
-
-  .mtag {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
-    min-width: 48px; text-align: center; padding: 2px 4px;
-    border-radius: 4px; background: var(--color-surface-alt);
-    border: 1px solid currentColor;
-    flex-shrink: 0;
-  }
-  .mtag.lg { font-size: 12px; padding: 4px 10px; min-width: 64px; }
-
-  .epath {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-
-  .panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--color-bg); }
-
-  .req-bar {
-    display: flex; align-items: center; gap: 16px;
-    padding: 20px 24px; background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border); flex-shrink: 0;
-  }
-  .req-path { 
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
-    font-size: 16px; flex: 1; color: var(--color-text); font-weight: 500;
-  }
   .send-btn {
     background: var(--color-primary); color: var(--color-primary-text); 
     border: none; border-radius: var(--radius-sm);
-    padding: 8px 24px; font-size: 14px; font-weight: 600; cursor: pointer;
-    box-shadow: 0 2px 4px oklch(var(--color-primary) / 0.2);
-    transition: all 0.2s;
+    padding: 10px 28px; font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 6px -1px oklch(var(--color-primary) / 0.2), 0 2px 4px -2px oklch(var(--color-primary) / 0.1);
   }
-  .send-btn:hover:not(:disabled) { background: var(--color-primary-hover); transform: translateY(-1px); }
-  .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-  .send-btn.secondary { background: var(--color-surface-alt); color: var(--color-text); box-shadow: none; }
+  .send-btn:hover:not(:disabled) { 
+    background: var(--color-primary-hover); 
+    transform: translateY(-1px);
+    box-shadow: 0 10px 15px -3px oklch(var(--color-primary) / 0.25);
+  }
+  .send-btn:active:not(:disabled) { transform: translateY(0); }
 
-  .dirty-pill {
-    color: var(--color-danger); border: 1px solid oklch(var(--color-danger) / 0.2); background: oklch(var(--color-danger) / 0.05);
-    border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 600;
-  }
-
-  .resync-btn, .folder-btn {
-    background: var(--color-surface-alt); color: var(--color-text); 
-    border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-    padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
-    transition: all 0.2s;
-  }
-  .resync-btn:hover:not(:disabled), .folder-btn:hover:not(:disabled) { 
-    background: var(--color-bg); border-color: var(--color-primary);
+  .ep-btn.active { 
+    background: oklch(var(--color-primary) / 0.08); 
+    color: var(--color-primary);
+    font-weight: 600;
+    border-left: 3px solid var(--color-primary);
+    padding-left: 37px; /* Adjust for border */
   }
 
-  .req-name {
-    padding: 8px 24px 12px; font-size: 12px; color: var(--color-text-dim);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    background: var(--color-surface); flex-shrink: 0;
-  }
-
-  .editor-card {
-    display: flex; flex-direction: column; flex-shrink: 0;
-    margin: 20px 24px 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-    background: var(--color-surface); overflow: hidden;
+  .editor-card, .resp, .sync-log {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
     box-shadow: var(--shadow-soft);
+    transition: transform 200ms ease, box-shadow 200ms ease;
   }
-  .editor-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px; background: var(--color-surface-alt); border-bottom: 1px solid var(--color-border);
-    font-size: 11px; color: var(--color-text-dim); font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .editor-actions { display: flex; align-items: center; gap: 12px; font-weight: 500; text-transform: none; }
-  .editor-actions button {
-    background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 6px;
-    padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 600;
-  }
-
-  textarea {
-    width: 100%; height: 240px; resize: vertical; min-height: 120px; max-height: 45vh;
-    background: var(--color-surface); color: var(--color-text); border: none; outline: none; padding: 16px;
-    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-    font-size: 13px; line-height: 1.6;
-  }
-
-  .resp {
-    flex: 1; display: flex; flex-direction: column; overflow: hidden;
-    margin: 20px 24px; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  .editor-card:focus-within {
+    box-shadow: 0 12px 20px -5px oklch(20% 0.02 210 / 0.08);
   }
   .resp.resp-err { border-color: oklch(var(--color-danger) / 0.3); }
   

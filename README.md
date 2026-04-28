@@ -1,114 +1,58 @@
-# Yacito
+# 👶 Yacito
 
 <p align="center">
   <img src="static/yacito-logo.png" alt="Yacito logo" width="180" />
 </p>
 
+The adorable, interactive, and **baby-easy** GUI for [httpYac](https://httpyac.github.io/).
 
-Yacito is a tiny desktop workbench for [`httpyac`](https://httpyac.github.io/): pick a folder of `.http` files, browse requests, edit a request temporarily, and send it without leaving the app.
+Yacito (from the Sanskrit *yācito*, meaning "requested") is a user-friendly desktop interface built on top of the powerful httpYac engine. It’s designed for developers who want the full power of text-based HTTP files with the comfort of a visual, interactive workspace. Making complex API requests is now child's play.
 
-Yacito is not an official httpyac project. It is a companion GUI that uses the httpyac CLI as its request engine when available.
+## 🍼 Quick Install
 
-## Goals
+Get up and running in seconds. These scripts install Rust, system dependencies, and project requirements.
 
-- Keep `.http` files and `httpyac` as the source of truth.
-- Work on Linux, Windows, and macOS through Tauri.
-- Provide a friendly GUI for request discovery, temporary edits, environment selection, tokens, and response output.
-- Stay lightweight: no proprietary collection format.
-- Support i18n from the start.
-
-## Current features
-
-- Select and persist a folder containing httpyac `.http` files.
-- Load environments from `http-client.env.json`.
-- Browse endpoints grouped by `.http` file.
-- Edit the selected `.http` block temporarily before sending.
-- Send edited or original requests through `httpyac`.
-- Optional Resync integration when the selected folder belongs to a workspace with `scripts/generate-http-files.py`.
-- English/Spanish UI dictionary.
-
-## Install from source
-
-```bash
-git clone https://github.com/<your-org>/yacito.git
-cd yacito
-npm install
-npm run doctor
+### Windows (PowerShell)
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/guidonaselli/yacito/main/scripts/install-windows.ps1'))
 ```
 
-If `doctor` reports that `httpyac` is missing, install it explicitly:
-
+### WSL / Linux (Ubuntu/Debian)
 ```bash
-npm run setup:httpyac
-npm run doctor
+curl -sSL https://raw.githubusercontent.com/guidonaselli/yacito/main/scripts/install-wsl.sh | bash
 ```
 
-Yacito does **not** install `httpyac` automatically during `npm install`, because global installs should be an explicit user choice.
+## 🛠️ Manual Setup
 
-## Run from source
+If you prefer to do it yourself:
 
-```bash
-npm run dev:app
-```
+1.  **Clone the repo**: `git clone https://github.com/guidonaselli/yacito`
+2.  **Install dependencies**: `npm install`
+3.  **Setup httpYac**: `npm run setup:httpyac`
+4.  **Run it**: `npm run dev:app`
 
-Useful checks:
+## ✨ Features
 
-```bash
-npm run check
-cd src-tauri && cargo fmt && cargo test
-```
+- **Visual Feedback**: Real-time response visualization.
+- **Runes Powered**: Built with Svelte 5 for lightning-fast reactivity.
+- **Configurable UI**: Style variables based on OKLCH for consistent, beautiful themes.
+- **i18n Support**: Available in English and Spanish.
+- **Baby-Easy**: No steep learning curves. Just open your `.http` files and start requesting.
 
-## Build from source
+## 📦 Building for Production
+
+To generate a standalone `.exe` or `.msi`:
 
 ```bash
 npm run build:app
 ```
+The artifacts will be generated in `src-tauri/target/release/bundle/`.
 
-The generated installer/bundle is written by Tauri under `src-tauri/target/release/bundle/`.
+## 👶 Why Yacito?
 
-## Windows notes
+Apart from being the "baby" version of httpYac, the word **Yacito** (*yācito*) literally means "requested" or "asked" in ancient Sanskrit and Pali. It’s the perfect name for a tool dedicated to making HTTP requests!
 
-Recommended baseline:
+---
+*Yacito is not an official httpyac project. It is a companion GUI that uses the httpyac CLI as its request engine.*
 
-1. Install Node.js LTS.
-2. Install Rust from <https://rustup.rs/>.
-3. Install the Microsoft C++ Build Tools if Tauri/Rust requests them.
-4. Install dependencies and run:
-
-```powershell
-npm install
-npm run setup:httpyac
-npm run doctor
-npm run dev:app
-```
-
-Yacito searches for `httpyac` in `PATH`, including Windows `.cmd` shims such as `httpyac.cmd` from global npm installs.
-
-## Linux notes
-
-Tauri requires WebKit/GTK system packages. The exact package names depend on the distro. After the system packages are installed:
-
-```bash
-npm install
-npm run setup:httpyac
-npm run doctor
-npm run dev:app
-```
-
-## Project structure
-
-```text
-src/                 Svelte UI
-src/lib/i18n.ts      Minimal i18n dictionary
-src-tauri/           Tauri/Rust backend
-scripts/doctor.mjs   Source-install diagnostics
-openspec/            SDD specs and active change docs
-```
-
-## Attribution
-
-Yacito uses the `httpyac` CLI as its request engine when installed. httpyac is an MIT-licensed project by Andreas Weber. See <https://httpyac.github.io/> and <https://github.com/AnWeber/httpyac>.
-
-## License
-
-MIT
+Made with 🍼 and ☕ for the developer community.

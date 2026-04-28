@@ -1,0 +1,34 @@
+#!/bin/bash
+set -e
+
+echo "🍼 Yacito WSL Quick Installer"
+echo "----------------------------"
+
+# System Dependencies for Tauri
+echo "📦 Installing system dependencies..."
+sudo apt update
+sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+# Rust
+if ! command -v rustc &> /dev/null; then
+    echo "🦀 Installing Rust..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source $HOME/.cargo/env
+else
+    echo "✓ Rust already installed"
+fi
+
+# Node.js check
+if ! command -v node &> /dev/null; then
+    echo "❌ Node.js not found. Please install it using your preferred method (e.g., nvm)."
+    exit 1
+fi
+
+# Project setup
+echo "🚀 Setting up project..."
+npm install
+npm run setup:httpyac
+
+echo ""
+echo "✨ Installation complete!"
+echo "Run 'npm run dev:app' to start Yacito."
