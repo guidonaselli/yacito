@@ -234,6 +234,7 @@ fn load_services(api_http_dir: String) -> Vec<ServiceFile> {
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .filter(|p| p.extension().map(|x| x == "http").unwrap_or(false))
+            .filter(|p| !p.file_name().unwrap_or_default().to_string_lossy().starts_with("."))
             .collect(),
         Err(_) => return vec![],
     };
@@ -598,7 +599,7 @@ fn execute_raw_request(
         .map(|d| d.as_millis())
         .unwrap_or_default();
     let temp_file =
-        std::env::temp_dir().join(format!("yacito-{}-{millis}.http", std::process::id()));
+        dir.join(format!(".yacito-{}-{millis}.http", std::process::id()));
 
     if let Err(e) = fs::write(&temp_file, content) {
         return ExecuteResult {
