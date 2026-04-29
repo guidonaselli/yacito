@@ -5,6 +5,8 @@
   import { onMount } from 'svelte';
   import { detectLanguage, languages, translate, type Language, type TranslationKey } from '$lib/i18n';
 
+  type ThemePreference = 'system' | 'light' | 'dark';
+
   interface Endpoint {
     name: string;
     method: string;
@@ -93,6 +95,9 @@
   let loadingRequest = $state(false);
   let choosingDir = $state(false);
   let language = $state<Language>('en');
+  let themePreference = $state<ThemePreference>('system');
+  let systemPrefersDark = $state(false);
+  let activeTheme = $derived(themePreference === 'system' ? (systemPrefersDark ? 'dark' : 'light') : themePreference);
   let searchQuery = $state('');
   let importingPostman = $state(false);
   let importedFile = $state<string | null>(null);
@@ -130,6 +135,11 @@
   }
 
   $effect(() => writeSetting('language', language));
+  $effect(() => writeSetting('themePreference', themePreference));
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.theme = activeTheme;
+  });
   $effect(() => writeSetting('selectedEnv', selectedEnv));
   $effect(() => writeSetting('tokenVisible', tokenVisible));
   $effect(() => writeSetting('traceHeight', traceHeight));
@@ -372,12 +382,12 @@
 
   function methodColor(m: string): string {
     const c: Record<string, string> = {
-      GET: 'oklch(60% 0.12 230)',    /* Blue */
-      POST: 'oklch(65% 0.15 150)',   /* Green */
-      PUT: 'oklch(70% 0.15 70)',     /* Orange/Yellow */
-      DELETE: 'oklch(60% 0.18 30)',  /* Red/Coral */
-      PATCH: 'oklch(65% 0.12 180)',  /* Teal */
-      HEAD: 'oklch(55% 0.12 300)',   /* Purple */
+      GET: 'var(--method-get)',
+      POST: 'var(--method-post)',
+      PUT: 'var(--method-put)',
+      DELETE: 'var(--method-delete)',
+      PATCH: 'var(--method-patch)',
+      HEAD: 'var(--method-head)',
     };
     return c[m.toUpperCase()] ?? 'var(--color-text-dim)';
   }
@@ -392,9 +402,22 @@
     return t('resyncAll');
   }
 
+  function isThemePreference(value: string | null): value is ThemePreference {
+    return value === 'system' || value === 'light' || value === 'dark';
+  }
+
   onMount(async () => {
     const storedLanguage = readSetting('language') as Language | null;
+    const storedTheme = readSetting('themePreference');
     language = storedLanguage && languages.includes(storedLanguage) ? storedLanguage : detectLanguage();
+    themePreference = isThemePreference(storedTheme) ? storedTheme : 'system';
+    if (typeof window !== 'undefined' && 'matchMedia' in window) {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      systemPrefersDark = media.matches;
+      media.addEventListener('change', (event) => {
+        systemPrefersDark = event.matches;
+      });
+    }
     selectedEnv = readSetting('selectedEnv') ?? '';
     tokenVisible = readSetting('tokenVisible') === 'true';
     traceHeight = readSetting('traceHeight') ?? defaultTraceHeight;
@@ -407,7 +430,7 @@
   });
 </script>
 
-<div class="app">
+<div class="app" data-theme={activeTheme}>
   <header>
     <div class="toolbar">
       <div class="folder-group">
@@ -477,6 +500,14 @@
           {#each languages as lang}
             <option value={lang}>{lang.toUpperCase()}</option>
           {/each}
+        </select>
+      </label>
+      <label class="field">
+        <span>{t('theme')}</span>
+        <select bind:value={themePreference}>
+          <option value="system">{t('themeSystem')}</option>
+          <option value="light">{t('themeLight')}</option>
+          <option value="dark">{t('themeDark')}</option>
         </select>
       </label>
       <label class="field token-field">
@@ -598,7 +629,7 @@
         <div class="empty-panel">
           <div class="empty-icon">🍼</div>
           <p>{t('selectEndpoint')}</p>
-          <small>{t('appName')} (yācito) — {t('selectFolderTitle')}</small>
+          <small>{t('appName')} (yācito), {t('selectFolderTitle')}</small>
           {#if apiHttpDir}<code style="margin-top: 10px; opacity: 0.5;">{apiHttpDir}</code>{/if}
           {#if syncResult}
             <div class="sync-log empty-sync-log" class:sync-log-err={syncResult.exit_code !== 0}>
@@ -628,30 +659,79 @@
 </div>
 
 <style>
-  :root {
+  :global(:root) {
     /* Evolved Soft UI Palette - Modern & Baby-Easy */
-    --color-bg: oklch(99% 0.005 220);
-    --color-surface: oklch(100% 0 0);
-    --color-surface-alt: oklch(97% 0.01 220);
-    --color-border: oklch(92% 0.015 220);
-    --color-text: oklch(20% 0.02 220);
-    --color-text-dim: oklch(50% 0.02 220);
-    
+    color-scheme: light;
+    --color-bg: oklch(99% 0.006 220);
+    --color-surface: oklch(100% 0.004 220);
+    --color-surface-alt: oklch(97% 0.012 220);
+    --color-border: oklch(91% 0.018 220);
+    --color-text: oklch(20% 0.024 220);
+    --color-text-dim: oklch(50% 0.024 220);
+
     --color-primary: oklch(65% 0.14 225);
     --color-primary-hover: oklch(60% 0.15 225);
-    --color-primary-text: oklch(100% 0 0);
-    
+    --color-primary-text: oklch(99% 0.004 220);
+
     --color-accent: oklch(75% 0.12 180);
     --color-danger: oklch(65% 0.16 30);
     --color-success: oklch(70% 0.14 145);
-    
+
+    --color-code-bg: oklch(98% 0.006 220);
+    --color-primary-tint: color-mix(in oklch, var(--color-primary) 10%, transparent);
+    --color-primary-shadow: color-mix(in oklch, var(--color-primary) 22%, transparent);
+    --color-danger-tint: color-mix(in oklch, var(--color-danger) 7%, transparent);
+    --color-danger-border: color-mix(in oklch, var(--color-danger) 26%, transparent);
+
+    --method-get: oklch(60% 0.12 230);
+    --method-post: oklch(65% 0.15 150);
+    --method-put: oklch(70% 0.15 70);
+    --method-delete: oklch(60% 0.18 30);
+    --method-patch: oklch(65% 0.12 180);
+    --method-head: oklch(55% 0.12 300);
+
     --radius-base: 14px;
     --radius-sm: 8px;
     --radius-lg: 20px;
-    
+
     --spacing-base: 8px;
     /* Modern Multi-layer Shadow */
     --shadow-soft: 0 2px 4px oklch(0% 0 0 / 0.02), 0 8px 16px -4px oklch(20% 0.05 220 / 0.04);
+    --shadow-focus: 0 12px 30px -10px color-mix(in oklch, var(--color-primary) 16%, transparent);
+  }
+
+  :global(html[data-theme='dark']) {
+    color-scheme: dark;
+    --color-bg: oklch(16% 0.018 230);
+    --color-surface: oklch(20% 0.022 230);
+    --color-surface-alt: oklch(24% 0.026 225);
+    --color-border: oklch(33% 0.03 225);
+    --color-text: oklch(91% 0.014 220);
+    --color-text-dim: oklch(68% 0.028 220);
+
+    --color-primary: oklch(73% 0.12 225);
+    --color-primary-hover: oklch(78% 0.13 225);
+    --color-primary-text: oklch(17% 0.024 230);
+
+    --color-accent: oklch(78% 0.1 180);
+    --color-danger: oklch(72% 0.14 28);
+    --color-success: oklch(76% 0.12 145);
+
+    --color-code-bg: oklch(18% 0.018 230);
+    --color-primary-tint: color-mix(in oklch, var(--color-primary) 16%, transparent);
+    --color-primary-shadow: color-mix(in oklch, var(--color-primary) 20%, transparent);
+    --color-danger-tint: color-mix(in oklch, var(--color-danger) 12%, transparent);
+    --color-danger-border: color-mix(in oklch, var(--color-danger) 34%, transparent);
+
+    --method-get: oklch(76% 0.1 230);
+    --method-post: oklch(78% 0.12 150);
+    --method-put: oklch(80% 0.12 76);
+    --method-delete: oklch(74% 0.14 30);
+    --method-patch: oklch(78% 0.09 180);
+    --method-head: oklch(76% 0.1 300);
+
+    --shadow-soft: 0 1px 1px oklch(0% 0 0 / 0.18), 0 16px 32px -18px oklch(0% 0 0 / 0.42);
+    --shadow-focus: 0 18px 42px -24px color-mix(in oklch, var(--color-primary) 26%, transparent);
   }
 
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
@@ -665,7 +745,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .app { display: flex; flex-direction: column; height: 100vh; }
+  .app { display: flex; flex-direction: column; height: 100vh; background: var(--color-bg); transition: background-color 180ms ease-out, color 180ms ease-out; }
 
   header {
     display: flex; align-items: center; justify-content: space-between;
@@ -726,7 +806,7 @@
   select:focus, input:focus { 
     border-color: var(--color-primary);
     background-color: var(--color-surface);
-    box-shadow: 0 0 0 4px oklch(var(--color-primary) / 0.1);
+    box-shadow: 0 0 0 4px var(--color-primary-tint);
   }
 
   .folder-btn, .resync-btn {
@@ -751,6 +831,7 @@
   .token-wrap input { width: 140px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); height: 32px; }
   .toggle-vis {
     background: var(--color-surface-alt);
+    color: var(--color-text);
     border: 1.5px solid var(--color-border);
     border-left: none;
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -813,7 +894,7 @@
   }
   .ep-btn:hover { background: var(--color-bg); color: var(--color-text); }
   .ep-btn.active { 
-    background: oklch(var(--color-primary) / 0.08); 
+    background: var(--color-primary-tint); 
     color: var(--color-primary);
     font-weight: 700;
   }
@@ -851,12 +932,12 @@
     background: var(--color-primary); color: var(--color-primary-text); 
     border: none; border-radius: var(--radius-sm);
     padding: 8px 24px; font-size: 13px; font-weight: 800; cursor: pointer;
-    box-shadow: 0 4px 12px oklch(var(--color-primary) / 0.2);
+    box-shadow: 0 4px 12px var(--color-primary-shadow);
   }
   .send-btn:hover:not(:disabled) { 
     background: var(--color-primary-hover); 
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px oklch(var(--color-primary) / 0.25);
+    box-shadow: 0 6px 16px var(--color-primary-shadow);
   }
   .send-btn:active:not(:disabled) { transform: translateY(0); }
   .send-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
@@ -864,7 +945,7 @@
   .send-btn.secondary:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 
   .dirty-pill {
-    color: var(--color-danger); border: 1.5px solid oklch(var(--color-danger) / 0.2); background: oklch(var(--color-danger) / 0.05);
+    color: var(--color-danger); border: 1.5px solid var(--color-danger-border); background: var(--color-danger-tint);
     border-radius: 999px; padding: 2px 10px; font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
   }
@@ -883,7 +964,7 @@
     box-shadow: var(--shadow-soft);
   }
   .editor-card:focus-within {
-    box-shadow: 0 12px 30px -10px oklch(20% 0.1 220 / 0.08);
+    box-shadow: var(--shadow-focus);
     border-color: var(--color-primary);
   }
 
@@ -914,7 +995,7 @@
   }
 
   .resp { flex: 1; margin: 16px 24px 24px; min-height: 300px; }
-  .resp.resp-err { border-color: oklch(var(--color-danger) / 0.3); }
+  .resp.resp-err { border-color: var(--color-danger-border); }
   
   .ok { color: var(--color-success); font-weight: 800; }
   .err { color: var(--color-danger); font-weight: 800; }
@@ -926,7 +1007,7 @@
   }
   .ok-out { color: var(--color-text); }
   .err-out {
-    color: var(--color-danger); background: oklch(var(--color-danger) / 0.02);
+    color: var(--color-danger); background: var(--color-danger-tint);
     border-bottom: 1px solid var(--color-border); flex-shrink: 0; max-height: 35%;
   }
 
@@ -935,7 +1016,7 @@
     padding: 6px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-dim);
   }
   .trace-label:first-child { border-top: none; }
-  .trace-out { color: var(--color-text-dim); flex: 0 0 auto; height: 120px; min-height: 40px; max-height: 60vh; background: oklch(98% 0.005 220); resize: vertical; overflow: auto; margin-bottom: 0; padding-bottom: 8px; }
+  .trace-out { color: var(--color-text-dim); flex: 0 0 auto; height: 120px; min-height: 40px; max-height: 60vh; background: var(--color-code-bg); resize: vertical; overflow: auto; margin-bottom: 0; padding-bottom: 8px; }
 
   .sync-log { margin: 0 32px 24px; max-height: 260px; flex-shrink: 0; }
   .sync-log .out { max-height: 200px; flex: 0 1 auto; }
@@ -949,7 +1030,7 @@
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 20px; color: var(--color-text-dim);
   }
-  .empty-icon { font-size: 80px; opacity: 0.2; filter: drop-shadow(0 10px 20px oklch(0% 0 0 / 0.1)); }
+  .empty-icon { font-size: 80px; opacity: 0.2; filter: drop-shadow(0 10px 20px color-mix(in oklch, var(--color-primary) 18%, transparent)); }
   .empty-panel p { font-size: 20px; font-weight: 600; color: var(--color-text); }
   .empty-panel small { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; opacity: 0.7; }
 </style>

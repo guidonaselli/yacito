@@ -39,7 +39,7 @@ If you prefer to do it yourself:
 
 - **Internal Generator**: Automatically generate `.http` files from OpenAPI specs. No external scripts required.
 - **Postman Import**: Convert simple Postman Collection JSON files into runnable `.http` files in your selected folder. Postman scripts are preserved as comments for safe manual conversion.
-- **Remembered Preferences**: Language, selected environment, token visibility, and HTTP Trace height persist across restarts.
+- **Remembered Preferences**: Theme, language, selected environment, token visibility, and HTTP Trace height persist across restarts.
 - **Visual Feedback**: Real-time response visualization.
 - **Runes Powered**: Built with Svelte 5 for lightning-fast reactivity.
 - **Configurable UI**: Style variables based on OKLCH for consistent, beautiful themes.
