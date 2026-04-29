@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.1 - Theme polish
+
+### Highlights
+
+- Added a consistent light/system/dark theme selector.
+- Persisted theme preference across restarts.
+- Applied the theme before Svelte boots to avoid a light/dark flash.
+- Rebalanced OKLCH tokens for dark mode while preserving Yacito's soft baby-blue identity.
+
+### Notes
+
+- Windows/macOS artifacts are currently unsigned.
+
 ## v0.1.0 - Initial public preview
 
 Yacito is now ready as a baby-easy desktop GUI companion for httpYac.
