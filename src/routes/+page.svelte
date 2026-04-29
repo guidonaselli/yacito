@@ -28,9 +28,9 @@
     content: string;
   }
 
-  interface WorkspaceCapabilities {
-    generator_available: boolean;
-    generator_path: string | null;
+  interface PostmanImportResult {
+    message: string;
+    file: string;
   }
 
   let apiHttpDir = $state('');
@@ -66,6 +66,21 @@
 
   let parsedResult = $derived(result?.stdout ? parseOutput(result.stdout) : null);
 
+  const STORAGE_PREFIX = 'yacito:';
+  const defaultTraceHeight = '120px';
+
+  let settingsReady = $state(false);
+
+  function readSetting(key: string): string | null {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(`${STORAGE_PREFIX}${key}`);
+  }
+
+  function writeSetting(key: string, value: string | boolean) {
+    if (!settingsReady || typeof localStorage === 'undefined') return;
+    localStorage.setItem(`${STORAGE_PREFIX}${key}`, String(value));
+  }
+
   let executing = $state(false);
   let expanded = $state<Set<string>>(new Set());
   let tokenVisible = $state(false);
@@ -80,6 +95,9 @@
   let language = $state<Language>('en');
   let searchQuery = $state('');
   let importingPostman = $state(false);
+  let importedFile = $state<string | null>(null);
+  let traceHeight = $state(defaultTraceHeight);
+  let traceOutEl = $state<HTMLPreElement | null>(null);
 
   interface WorkspaceCapabilities {
     generator_available: boolean;
@@ -111,6 +129,11 @@
     return translate(language, key, params);
   }
 
+  $effect(() => writeSetting('language', language));
+  $effect(() => writeSetting('selectedEnv', selectedEnv));
+  $effect(() => writeSetting('tokenVisible', tokenVisible));
+  $effect(() => writeSetting('traceHeight', traceHeight));
+
   async function loadAll() {
     try {
       apiHttpDir = await invoke<string>('get_api_http_dir');
@@ -120,7 +143,7 @@
       capabilities = apiHttpDir
         ? await invoke<WorkspaceCapabilities>('get_workspace_capabilities', { apiHttpDir })
         : { generator_available: false, generator_path: null, internal_generator_available: false };
-      if (newEnvs.length > 0 && !selectedEnv) {
+      if (newEnvs.length > 0 && !newEnvs.includes(selectedEnv)) {
         selectedEnv = newEnvs[0];
       }
       expanded = new Set(services.map(s => s.service));
@@ -249,7 +272,8 @@
     if (!apiHttpDir || syncing || !capabilities.generator_available) return;
     syncing = true;
     syncResult = null;
-    selectedEndpoint = null; // Bring user to the main empty panel for the sync log
+    selectedEndpoint = null;
+    importedFile = null; // Bring user to the main empty panel for the sync log
     const service = syncScope === 'selected' ? selectedServiceName() : null;
     try {
       syncResult = await invoke<ExecuteResult>('run_generate_http_files', {
@@ -287,6 +311,7 @@
     importingPostman = true;
     syncResult = null;
     selectedEndpoint = null;
+    importedFile = null;
     try {
       const selected = await open({
         directory: false,
@@ -297,16 +322,39 @@
       });
       if (!selected || Array.isArray(selected)) return;
 
-      const msg = await invoke<string>('import_postman_collection', {
+      const imported = await invoke<PostmanImportResult>('import_postman_collection', {
         apiHttpDir,
         collectionFile: selected,
       });
-      syncResult = { stdout: msg, stderr: '', exit_code: 0 };
-      await loadAll();
+      importedFile = imported.file;
+      syncResult = { stdout: imported.message, stderr: '', exit_code: 0 };
+      await selectImportedFile(imported.file);
     } catch (e) {
       syncResult = { stdout: '', stderr: String(e), exit_code: -1 };
     } finally {
       importingPostman = false;
+    }
+  }
+
+  function rememberTraceHeight(node: HTMLPreElement) {
+    const observer = new ResizeObserver(() => {
+      const height = Math.round(node.getBoundingClientRect().height);
+      if (height >= 40) traceHeight = `${height}px`;
+    });
+    observer.observe(node);
+    return {
+      destroy() {
+        observer.disconnect();
+      },
+    };
+  }
+
+  async function selectImportedFile(file: string) {
+    await loadAll();
+    const importedService = services.find((service) => service.file === file);
+    const firstEndpoint = importedService?.endpoints[0];
+    if (firstEndpoint) {
+      await select(firstEndpoint);
     }
   }
 
@@ -345,7 +393,12 @@
   }
 
   onMount(async () => {
-    language = detectLanguage();
+    const storedLanguage = readSetting('language') as Language | null;
+    language = storedLanguage && languages.includes(storedLanguage) ? storedLanguage : detectLanguage();
+    selectedEnv = readSetting('selectedEnv') ?? '';
+    tokenVisible = readSetting('tokenVisible') === 'true';
+    traceHeight = readSetting('traceHeight') ?? defaultTraceHeight;
+    settingsReady = true;
     await loadAll();
     if (apiHttpDir) {
       await invoke('start_file_watcher', { apiHttpDir }).catch(() => {});
@@ -530,7 +583,7 @@
             {#if result.stdout}
               {#if parsedResult?.trace}
                 <div class="trace-label">HTTP Trace</div>
-                <pre class="out trace-out">{parsedResult.trace}</pre>
+                <pre bind:this={traceOutEl} use:rememberTraceHeight class="out trace-out" style:height={traceHeight}>{parsedResult.trace}</pre>
                 <div class="trace-label">Response Body</div>
               {/if}
               <pre class="out ok-out">{parsedResult?.body || result.stdout}</pre>
@@ -562,6 +615,9 @@
               {/if}
               {#if syncResult.stdout}
                 <pre class="out ok-out">{syncResult.stdout}</pre>
+              {/if}
+              {#if importedFile}
+                <button class="open-imported-btn" onclick={() => selectImportedFile(importedFile!)}>{t('openImported')}</button>
               {/if}
             </div>
           {/if}
@@ -843,6 +899,12 @@
     padding: 4px 10px; cursor: pointer; font-size: 11px; font-weight: 700;
   }
   .editor-actions button:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+
+  .open-imported-btn {
+    align-self: flex-end; margin: 10px 12px 12px; padding: 7px 12px;
+    background: var(--color-primary); color: var(--color-primary-text); border: none;
+    border-radius: var(--radius-sm); font-size: 12px; font-weight: 800; cursor: pointer;
+  }
 
   textarea {
     width: 100%; height: 200px; resize: vertical; min-height: 100px; max-height: 40vh;

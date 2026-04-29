@@ -44,6 +44,12 @@ pub struct WorkspaceCapabilities {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PostmanImportResult {
+    pub message: String,
+    pub file: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct YacitoServiceConfig {
     pub name: String,
     #[serde(rename = "localPort")]
@@ -1081,7 +1087,7 @@ fn append_postman_items(
 fn import_postman_collection(
     api_http_dir: String,
     collection_file: String,
-) -> Result<String, String> {
+) -> Result<PostmanImportResult, String> {
     let dir = Path::new(&api_http_dir);
     if !dir.is_dir() {
         return Err(format!("Selected folder does not exist: {api_http_dir}"));
@@ -1144,10 +1150,11 @@ fn import_postman_collection(
     fs::write(&target, format!("{header}{}", body.trim_start()))
         .map_err(|e| format!("Failed to write imported .http file: {e}"))?;
 
-    Ok(format!(
-        "Imported Postman collection into {}",
-        target.to_string_lossy()
-    ))
+    let file = target.to_string_lossy().to_string();
+    Ok(PostmanImportResult {
+        message: format!("Imported Postman collection into {file}"),
+        file,
+    })
 }
 
 #[tauri::command]
@@ -1295,12 +1302,13 @@ mod tests {
         )
         .unwrap();
 
-        let msg = import_postman_collection(
+        let imported_result = import_postman_collection(
             base.to_string_lossy().to_string(),
             collection.to_string_lossy().to_string(),
         )
         .unwrap();
-        assert!(msg.contains("notificador-manager.http"));
+        assert!(imported_result.file.ends_with("notificador-manager.http"));
+        assert!(imported_result.message.contains("notificador-manager.http"));
 
         let imported = fs::read_to_string(base.join("notificador-manager.http")).unwrap();
         assert!(imported.contains("@postmanBasicUsername = myuser"));

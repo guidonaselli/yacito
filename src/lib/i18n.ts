@@ -48,6 +48,7 @@ const dictionaries = {
     importingPostman: 'Importing…',
     selectPostmanTitle: 'Select a Postman collection JSON',
     importPostmanHint: 'Import a Postman collection as a .http file in the selected folder',
+    openImported: 'Open imported file',
   },
   es: {
     appName: 'Yacito',
@@ -95,6 +96,7 @@ const dictionaries = {
     importingPostman: 'Importando…',
     selectPostmanTitle: 'Seleccionar colección JSON de Postman',
     importPostmanHint: 'Importa una colección de Postman como archivo .http en la carpeta seleccionada',
+    openImported: 'Abrir importado',
   },
 } satisfies Record<Language, Record<string, string>>;
 

@@ -39,6 +39,7 @@ If you prefer to do it yourself:
 
 - **Internal Generator**: Automatically generate `.http` files from OpenAPI specs. No external scripts required.
 - **Postman Import**: Convert simple Postman Collection JSON files into runnable `.http` files in your selected folder. Postman scripts are preserved as comments for safe manual conversion.
+- **Remembered Preferences**: Language, selected environment, token visibility, and HTTP Trace height persist across restarts.
 - **Visual Feedback**: Real-time response visualization.
 - **Runes Powered**: Built with Svelte 5 for lightning-fast reactivity.
 - **Configurable UI**: Style variables based on OKLCH for consistent, beautiful themes.
@@ -73,6 +74,8 @@ Yacito writes the generated `.http` file into the currently selected folder, the
 
 ## 📦 Builds and Artifacts
 
+For stable builds, check the [GitHub Releases page](https://github.com/guidonaselli/yacito/releases). Release tags like `v0.1.0` create a draft release with Linux, Windows, and macOS bundles.
+
 Every push and pull request runs the full CI pipeline: Svelte type-checking, frontend build, Rust formatting, Clippy, Rust tests, and real Tauri desktop builds for Linux, Windows, and macOS.
 
 You can download temporary CI build artifacts from the [GitHub Actions CI workflow](https://github.com/guidonaselli/yacito/actions/workflows/ci.yml):
@@ -88,6 +91,10 @@ npm run build:app
 ```
 
 The local artifacts will be generated in `src-tauri/target/release/bundle/`.
+
+## ✅ Release Smoke Test
+
+Before publishing a release, run through [`docs/SMOKE_TEST.md`](docs/SMOKE_TEST.md).
 
 ## 👶 Why Yacito?
 
