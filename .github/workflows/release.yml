@@ -114,16 +114,37 @@ jobs:
         with:
           path: release-artifacts
 
+      - name: Package release artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          found=0
+          for artifact_dir in release-artifacts/*; do
+            [ -d "$artifact_dir" ] || continue
+            found=1
+            artifact_name="$(basename "$artifact_dir")"
+            (cd "$artifact_dir" && zip -r "../../release-assets/${artifact_name}.zip" .)
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No release artifact directories found" >&2
+            exit 1
+          fi
+
       - name: Create or update draft release
         run: |
           set -euo pipefail
-          mapfile -t files < <(find release-artifacts -type f | sort)
+          mapfile -t files < <(find release-assets -type f | sort)
           if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release artifacts found" >&2
+            echo "No packaged release artifacts found" >&2
             exit 1
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')"
+            gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" --paginate --jq '.[].id' | while read -r asset_id; do
+              [ -n "$asset_id" ] || continue
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >/dev/null
+            done
             gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
           else
             gh release create "$RELEASE_TAG" "${files[@]}" \
