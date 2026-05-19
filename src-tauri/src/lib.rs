@@ -454,8 +454,8 @@ fn find_python() -> String {
 
 #[tauri::command]
 fn get_workspace_capabilities(api_http_dir: String) -> WorkspaceCapabilities {
-    let parsed_config = get_config_from_api_http(&api_http_dir)
-        .and_then(|path| read_yacito_config(&path).ok());
+    let parsed_config =
+        get_config_from_api_http(&api_http_dir).and_then(|path| read_yacito_config(&path).ok());
     let generator_path = parsed_config
         .as_ref()
         .and_then(|config| {
@@ -654,7 +654,10 @@ fn interpolate_generator_value(
 }
 
 fn build_generator_script_cmd(script: &Path, cwd: &Path) -> Command {
-    let extension = script.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+    let extension = script
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
 
     match extension {
         "py" => {
@@ -727,13 +730,15 @@ fn run_configured_generator(
     let cwd = generator
         .cwd
         .as_ref()
-        .map(|cwd| config_base_dir.join(interpolate_generator_value(
-            cwd,
-            api_http_dir,
-            &repo_root,
-            env_name,
-            service.as_deref(),
-        )))
+        .map(|cwd| {
+            config_base_dir.join(interpolate_generator_value(
+                cwd,
+                api_http_dir,
+                &repo_root,
+                env_name,
+                service.as_deref(),
+            ))
+        })
         .unwrap_or_else(|| repo_root.clone());
 
     let command_arg = resolved_command.to_string_lossy().to_string();
