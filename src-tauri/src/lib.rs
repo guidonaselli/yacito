@@ -62,8 +62,19 @@ pub struct YacitoServiceConfig {
     pub openapi_path: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct YacitoGeneratorConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub cwd: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct YacitoConfig {
+    #[serde(default)]
+    pub generator: Option<YacitoGeneratorConfig>,
+    #[serde(default)]
     pub services: Vec<YacitoServiceConfig>,
 }
 
@@ -86,6 +97,12 @@ fn get_config_from_api_http(api_http_dir: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn read_yacito_config(config_path: &Path) -> Result<YacitoConfig, String> {
+    let config_content =
+        fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?;
+    serde_json::from_str(&config_content).map_err(|e| format!("Invalid config JSON: {e}"))
 }
 
 fn parse_http_file(path: &Path) -> Vec<Endpoint> {
@@ -223,9 +240,62 @@ fn get_repo_root_from_api_http(api_http_dir: &str) -> Result<PathBuf, String> {
 }
 
 fn generator_script_from_api_http(api_http_dir: &str) -> Option<PathBuf> {
+    let api_http = PathBuf::from(api_http_dir);
     let root = get_repo_root_from_api_http(api_http_dir).ok()?;
-    let script = root.join("scripts/generate-http-files.py");
-    script.is_file().then_some(script)
+    let candidates = [
+        api_http.join("generate-http-files.py"),
+        api_http.join("generate-http-files.sh"),
+        api_http.join("generate-http-files.js"),
+        api_http.join("generate-http-files.mjs"),
+        api_http.join("scripts/generate-http-files.py"),
+        api_http.join("scripts/generate-http-files.sh"),
+        api_http.join("scripts/generate-http-files.js"),
+        api_http.join("scripts/generate-http-files.mjs"),
+        api_http.join(".yacito/generate-http-files.py"),
+        api_http.join(".yacito/generate-http-files.sh"),
+        api_http.join(".yacito/generate-http-files.js"),
+        api_http.join(".yacito/generate-http-files.mjs"),
+        root.join("scripts/generate-http-files.py"),
+        root.join("scripts/generate-http-files.sh"),
+        root.join("scripts/generate-http-files.js"),
+        root.join("scripts/generate-http-files.mjs"),
+        root.join(".yacito/generate-http-files.py"),
+        root.join(".yacito/generate-http-files.sh"),
+        root.join(".yacito/generate-http-files.js"),
+        root.join(".yacito/generate-http-files.mjs"),
+    ];
+
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+fn is_hidden_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.starts_with('.'))
+        .unwrap_or(false)
+}
+
+fn collect_http_files(dir: &Path, acc: &mut Vec<PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if is_hidden_path(&path) {
+            continue;
+        }
+
+        if path.is_dir() {
+            collect_http_files(&path, acc);
+            continue;
+        }
+
+        if path.extension().map(|x| x == "http").unwrap_or(false) {
+            acc.push(path);
+        }
+    }
 }
 
 #[tauri::command]
@@ -235,30 +305,23 @@ fn load_services(api_http_dir: String) -> Vec<ServiceFile> {
         return vec![];
     }
 
-    let mut paths: Vec<PathBuf> = match fs::read_dir(dir) {
-        Ok(e) => e
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().map(|x| x == "http").unwrap_or(false))
-            .filter(|p| {
-                !p.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .starts_with(".")
-            })
-            .collect(),
-        Err(_) => return vec![],
-    };
+    let mut paths: Vec<PathBuf> = Vec::new();
+    collect_http_files(dir, &mut paths);
     paths.sort();
 
     paths
         .into_iter()
         .map(|p| {
             let service = p
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
+                .strip_prefix(dir)
+                .ok()
+                .and_then(|relative| relative.with_extension("").to_str().map(str::to_string))
+                .unwrap_or_else(|| {
+                    p.file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                });
             let endpoints = parse_http_file(&p);
             ServiceFile {
                 service,
@@ -391,9 +454,23 @@ fn find_python() -> String {
 
 #[tauri::command]
 fn get_workspace_capabilities(api_http_dir: String) -> WorkspaceCapabilities {
-    let generator_path =
-        generator_script_from_api_http(&api_http_dir).map(|p| p.to_string_lossy().to_string());
-    let internal_generator_available = get_config_from_api_http(&api_http_dir).is_some();
+    let parsed_config = get_config_from_api_http(&api_http_dir)
+        .and_then(|path| read_yacito_config(&path).ok());
+    let generator_path = parsed_config
+        .as_ref()
+        .and_then(|config| {
+            config
+                .generator
+                .as_ref()
+                .map(|generator| format!("configured: {}", generator.command))
+        })
+        .or_else(|| {
+            generator_script_from_api_http(&api_http_dir).map(|p| p.to_string_lossy().to_string())
+        });
+    let internal_generator_available = parsed_config
+        .as_ref()
+        .map(|config| !config.services.is_empty())
+        .unwrap_or(false);
     WorkspaceCapabilities {
         generator_available: generator_path.is_some() || internal_generator_available,
         generator_path,
@@ -523,6 +600,15 @@ fn generate_http_block(
 fn build_httpyac_cmd(dir: &Path) -> Command {
     let httpyac = find_httpyac();
 
+    if httpyac == "httpyac" {
+        if let Some(npx) = find_in_path("npx") {
+            let mut cmd = Command::new(npx);
+            cmd.arg("--yes").arg("httpyac");
+            cmd.current_dir(dir);
+            return cmd;
+        }
+    }
+
     #[cfg(windows)]
     if httpyac.to_lowercase().ends_with(".cmd") {
         if let Ok(content) = fs::read_to_string(&httpyac) {
@@ -551,6 +637,147 @@ fn build_httpyac_cmd(dir: &Path) -> Command {
     let mut cmd = Command::new(&httpyac);
     cmd.current_dir(dir);
     cmd
+}
+
+fn interpolate_generator_value(
+    value: &str,
+    api_http_dir: &str,
+    repo_root: &Path,
+    env_name: &str,
+    service: Option<&str>,
+) -> String {
+    value
+        .replace("{{apiHttpDir}}", api_http_dir)
+        .replace("{{repoRoot}}", &repo_root.to_string_lossy())
+        .replace("{{env}}", env_name)
+        .replace("{{service}}", service.unwrap_or(""))
+}
+
+fn build_generator_script_cmd(script: &Path, cwd: &Path) -> Command {
+    let extension = script.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+
+    match extension {
+        "py" => {
+            let mut cmd = Command::new(find_python());
+            cmd.arg(script);
+            cmd.current_dir(cwd);
+            cmd
+        }
+        "js" | "mjs" | "cjs" => {
+            let mut cmd = Command::new("node");
+            cmd.arg(script);
+            cmd.current_dir(cwd);
+            cmd
+        }
+        "sh" => {
+            let mut cmd = Command::new("bash");
+            cmd.arg(script);
+            cmd.current_dir(cwd);
+            cmd
+        }
+        _ => {
+            let mut cmd = Command::new(script);
+            cmd.current_dir(cwd);
+            cmd
+        }
+    }
+}
+
+fn legacy_generator_cwd(api_http_dir: &str, script: &Path) -> PathBuf {
+    let api_http = PathBuf::from(api_http_dir);
+    if script.starts_with(&api_http) {
+        return api_http;
+    }
+    get_repo_root_from_api_http(api_http_dir).unwrap_or(api_http)
+}
+
+fn run_configured_generator(
+    api_http_dir: &str,
+    config_path: &Path,
+    generator: &YacitoGeneratorConfig,
+    env_name: &str,
+    service: Option<String>,
+) -> ExecuteResult {
+    let repo_root = match get_repo_root_from_api_http(api_http_dir) {
+        Ok(root) => root,
+        Err(e) => {
+            return ExecuteResult {
+                stdout: String::new(),
+                stderr: e,
+                exit_code: -1,
+            }
+        }
+    };
+
+    let config_base_dir = config_path.parent().unwrap_or(&repo_root);
+    let command_value = interpolate_generator_value(
+        &generator.command,
+        api_http_dir,
+        &repo_root,
+        env_name,
+        service.as_deref(),
+    );
+    let command_path = Path::new(&command_value);
+    let resolved_command = if command_path.components().count() > 1 && command_path.is_relative() {
+        config_base_dir.join(command_path)
+    } else {
+        PathBuf::from(&command_value)
+    };
+
+    let cwd = generator
+        .cwd
+        .as_ref()
+        .map(|cwd| config_base_dir.join(interpolate_generator_value(
+            cwd,
+            api_http_dir,
+            &repo_root,
+            env_name,
+            service.as_deref(),
+        )))
+        .unwrap_or_else(|| repo_root.clone());
+
+    let command_arg = resolved_command.to_string_lossy().to_string();
+    let mut cmd = if resolved_command.is_file() {
+        build_generator_script_cmd(&resolved_command, &cwd)
+    } else {
+        let mut cmd = Command::new(&command_arg);
+        cmd.current_dir(&cwd);
+        cmd
+    };
+
+    cmd.current_dir(&cwd);
+    cmd.env("YACITO_API_HTTP_DIR", api_http_dir);
+    cmd.env("YACITO_REPO_ROOT", &repo_root);
+    cmd.env("YACITO_ENV", env_name);
+    if let Some(selected_service) = service.as_deref() {
+        cmd.env("YACITO_SERVICE", selected_service);
+    }
+
+    for arg in &generator.args {
+        let value = interpolate_generator_value(
+            arg,
+            api_http_dir,
+            &repo_root,
+            env_name,
+            service.as_deref(),
+        );
+        if !value.is_empty() {
+            cmd.arg(value);
+        }
+    }
+
+    match cmd.output() {
+        Ok(o) => ExecuteResult {
+            stdout: String::from_utf8_lossy(&o.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&o.stderr).to_string(),
+            exit_code: o.status.code().unwrap_or(-1),
+        },
+        Err(e) => ExecuteResult {
+            stdout: String::new(),
+            stderr: format!("Failed to run configured generator: {e}"),
+            exit_code: -1,
+        },
+    }
 }
 
 #[tauri::command]
@@ -652,41 +879,49 @@ fn run_generate_http_files(
     env: String,
     service: Option<String>,
 ) -> ExecuteResult {
-    // Try internal generator first if config exists
     if let Some(config_path) = get_config_from_api_http(&api_http_dir) {
-        return run_internal_generator(&api_http_dir, config_path, &env, service);
+        let config = match read_yacito_config(&config_path) {
+            Ok(config) => config,
+            Err(e) => {
+                return ExecuteResult {
+                    stdout: String::new(),
+                    stderr: e,
+                    exit_code: -1,
+                }
+            }
+        };
+
+        if let Some(generator) = config.generator.as_ref() {
+            return run_configured_generator(
+                &api_http_dir,
+                &config_path,
+                generator,
+                &env,
+                service.clone(),
+            );
+        }
+
+        if !config.services.is_empty() {
+            return run_internal_generator(&api_http_dir, config, &env, service);
+        }
     }
 
-    // Legacy: external script
     let script = match generator_script_from_api_http(&api_http_dir) {
         Some(s) => s,
         None => {
             return ExecuteResult {
                 stdout: String::new(),
                 stderr:
-                    "Generator not found (yacito.config.json or scripts/generate-http-files.py)"
+                    "Generator not found. Supported options: yacito.config.json with services, yacito.config.json with generator.command, or a discovered script such as scripts/generate-http-files.{py,sh,js,mjs}."
                         .to_string(),
                 exit_code: -1,
             };
         }
     };
 
-    let repo_root = match script.parent().and_then(|p| p.parent()) {
-        Some(p) => p.to_path_buf(),
-        None => {
-            return ExecuteResult {
-                stdout: String::new(),
-                stderr: "Invalid script path".to_string(),
-                exit_code: -1,
-            }
-        }
-    };
-
-    let mut cmd = Command::new(find_python());
-    cmd.current_dir(&repo_root)
-        .arg(&script)
-        .arg("--env")
-        .arg(&env);
+    let cwd = legacy_generator_cwd(&api_http_dir, &script);
+    let mut cmd = build_generator_script_cmd(&script, &cwd);
+    cmd.arg("--env").arg(&env);
 
     if let Some(s) = service.filter(|s| !s.trim().is_empty()) {
         cmd.arg(s);
@@ -708,31 +943,10 @@ fn run_generate_http_files(
 
 fn run_internal_generator(
     api_http_dir: &str,
-    config_path: PathBuf,
+    config: YacitoConfig,
     env_name: &str,
     target_service: Option<String>,
 ) -> ExecuteResult {
-    let config_content = match fs::read_to_string(&config_path) {
-        Ok(c) => c,
-        Err(e) => {
-            return ExecuteResult {
-                stdout: String::new(),
-                stderr: format!("Failed to read config: {e}"),
-                exit_code: -1,
-            }
-        }
-    };
-    let config: YacitoConfig = match serde_json::from_str(&config_content) {
-        Ok(c) => c,
-        Err(e) => {
-            return ExecuteResult {
-                stdout: String::new(),
-                stderr: format!("Invalid config JSON: {e}"),
-                exit_code: -1,
-            }
-        }
-    };
-
     let mut success_count = 0;
     let mut skip_count = 0;
     let mut logs = Vec::new();
@@ -1169,6 +1383,11 @@ fn create_template_config(api_http_dir: String) -> Result<String, String> {
     }
 
     let default_config = serde_json::json!({
+      "generator": {
+        "command": "python3",
+        "args": ["scripts/generate-http-files.py", "--env", "{{env}}", "{{service}}"],
+        "cwd": ".."
+      },
       "services": [
         {
           "name": "example-service",
@@ -1186,7 +1405,7 @@ fn create_template_config(api_http_dir: String) -> Result<String, String> {
     )
     .map_err(|e| format!("Failed to write config: {}", e))?;
 
-    Ok("Created yacito.config.json. You can now click Sync!".to_string())
+    Ok("Created yacito.config.json with both generator and OpenAPI examples. Keep either generator.command for a custom workflow or services[] for the internal OpenAPI sync, then click Sync.".to_string())
 }
 
 #[tauri::command]
@@ -1215,7 +1434,7 @@ fn start_file_watcher(app: AppHandle, api_http_dir: String) -> Result<(), String
             }
         };
 
-        if let Err(e) = watcher.watch(Path::new(&api_http_dir), RecursiveMode::NonRecursive) {
+        if let Err(e) = watcher.watch(Path::new(&api_http_dir), RecursiveMode::Recursive) {
             eprintln!("watcher watch: {e}");
             return;
         }

@@ -12,8 +12,10 @@
     "tauri": "tauri",
     "doctor": "node scripts/doctor.mjs",
     "setup:httpyac": "npm install -g httpyac",
+    "install:linux": "bash scripts/install-linux.sh",
     "dev:app": "tauri dev",
-    "build:app": "tauri build"
+    "build:app": "tauri build",
+    "build:app:linux": "tauri build --bundles deb,rpm"
   },
   "license": "MIT",
   "dependencies": {

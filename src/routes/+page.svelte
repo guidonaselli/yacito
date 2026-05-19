@@ -134,6 +134,54 @@
     return translate(language, key, params);
   }
 
+  function normalizeCandidateToken(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const trimmed = value.trim().replace(/^"+|"+$/g, '');
+    return trimmed || null;
+  }
+
+  function extractTokenCandidate(text: string): string | null {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    const jwtPattern = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_+/=]+$/;
+    const direct = normalizeCandidateToken(trimmed);
+    if (direct && jwtPattern.test(direct)) return direct;
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'string') {
+        const tokenValue = normalizeCandidateToken(parsed);
+        if (tokenValue && jwtPattern.test(tokenValue)) return tokenValue;
+      }
+      if (parsed && typeof parsed === 'object') {
+        for (const key of ['token', 'accessToken', 'jwt', 'jwtToken']) {
+          const candidate = normalizeCandidateToken((parsed as Record<string, unknown>)[key] as string | undefined);
+          if (candidate && jwtPattern.test(candidate)) return candidate;
+        }
+      }
+    } catch {
+      // ignore non-JSON payloads
+    }
+
+    return null;
+  }
+
+  function adoptTokenFromResult(execResult: ExecuteResult | null, pathHint?: string | null) {
+    if (!execResult || execResult.exit_code !== 0 || !execResult.stdout) return;
+    const candidate = extractTokenCandidate(parseOutput(execResult.stdout).body);
+    if (!candidate) return;
+
+    const shouldAdopt =
+      pathHint?.toLowerCase().includes('/login') ||
+      token.trim() === '' ||
+      candidate !== token.trim();
+
+    if (shouldAdopt) {
+      token = candidate;
+    }
+  }
+
   $effect(() => writeSetting('language', language));
   $effect(() => writeSetting('themePreference', themePreference));
   $effect(() => {
@@ -222,6 +270,7 @@
           token: token || null,
         });
       }
+      adoptTokenFromResult(result, selectedEndpoint.path);
     } catch (e) {
       result = { stdout: '', stderr: String(e), exit_code: -1 };
     } finally {
@@ -266,6 +315,7 @@
         name: selectedEndpoint.name,
         token: token || null,
       });
+      adoptTokenFromResult(result, selectedEndpoint.path);
     } catch (e) {
       result = { stdout: '', stderr: String(e), exit_code: -1 };
     } finally {
