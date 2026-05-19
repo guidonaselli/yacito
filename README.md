@@ -24,7 +24,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 curl -sSL https://raw.githubusercontent.com/guidonaselli/yacito/main/scripts/install-linux.sh | bash
 ```
 
-The Linux installer currently supports `apt`, `pacman`, `dnf`, and `zypper`. By default it clones/updates Yacito in `~/work/yacito`, builds Linux bundles locally, and installs a launcher in `~/.local/bin/yacito`.
+The Linux installer currently supports `apt`, `pacman`, `dnf`, and `zypper`. By default it clones/updates Yacito in `~/work/yacito`, builds Linux bundles locally, installs a launcher in `~/.local/bin/yacito`, registers a `.desktop` app entry, and installs icons into the local hicolor theme so app launchers can discover it cleanly.
 
 To preconfigure a workspace such as `plataformamonitoreo/api-http` from the installer:
 

@@ -197,6 +197,9 @@ write_launcher() {
   local launcher_dir="${HOME}/.local/bin"
   local launcher_path="${launcher_dir}/yacito"
   local binary_path="${INSTALL_DIR}/src-tauri/target/release/yacito"
+  local applications_dir="${HOME}/.local/share/applications"
+  local desktop_file="${applications_dir}/yacito.desktop"
+  local icon_base_dir="${HOME}/.local/share/icons/hicolor"
 
   if [[ ! -x "${binary_path}" ]]; then
     echo "⚠️  Skipping launcher creation because the binary was not built yet: ${binary_path}"
@@ -214,16 +217,43 @@ EOF
 
   chmod +x "${launcher_path}"
 
-  mkdir -p "${HOME}/.local/share/applications"
-  cat > "${HOME}/.local/share/applications/yacito.desktop" <<EOF
+  mkdir -p "${applications_dir}"
+
+  mkdir -p "${icon_base_dir}/32x32/apps" "${icon_base_dir}/64x64/apps" "${icon_base_dir}/128x128/apps" "${icon_base_dir}/256x256/apps"
+  cp "${INSTALL_DIR}/src-tauri/icons/32x32.png" "${icon_base_dir}/32x32/apps/yacito.png"
+  cp "${INSTALL_DIR}/src-tauri/icons/64x64.png" "${icon_base_dir}/64x64/apps/yacito.png"
+  cp "${INSTALL_DIR}/src-tauri/icons/128x128.png" "${icon_base_dir}/128x128/apps/yacito.png"
+  cp "${INSTALL_DIR}/src-tauri/icons/128x128@2x.png" "${icon_base_dir}/256x256/apps/yacito.png"
+
+  cat > "${desktop_file}" <<EOF
 [Desktop Entry]
+Version=1.0
 Type=Application
 Name=Yacito
+GenericName=httpyac Workspace Runner
+Comment=Desktop UI for httpyac workspaces
 Exec=${launcher_path}
-Icon=${INSTALL_DIR}/src-tauri/icons/128x128.png
+TryExec=${launcher_path}
+Path=${INSTALL_DIR}
+Icon=yacito
 Terminal=false
-Categories=Development;
+Categories=Development;Utility;
+Keywords=httpyac;http;api;rest;openapi;postman;
+StartupNotify=true
+StartupWMClass=Yacito
 EOF
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${applications_dir}" >/dev/null 2>&1 || true
+  fi
+
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${icon_base_dir}" >/dev/null 2>&1 || true
+  fi
+
+  if command -v xdg-desktop-menu >/dev/null 2>&1; then
+    xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
+  fi
 }
 
 build_project() {
