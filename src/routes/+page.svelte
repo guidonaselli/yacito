@@ -6,6 +6,7 @@
   import { detectLanguage, languages, translate, type Language, type TranslationKey } from '$lib/i18n';
 
   type ThemePreference = 'system' | 'light' | 'dark';
+  type PortraitPane = 'browse' | 'request' | 'response';
 
   interface Endpoint {
     name: string;
@@ -110,6 +111,10 @@
   let importedFile = $state<string | null>(null);
   let traceHeight = $state(defaultTraceHeight);
   let traceOutEl = $state<HTMLPreElement | null>(null);
+  let portraitMode = $state(false);
+  let portraitPane = $state<PortraitPane>('browse');
+  let toolsExpanded = $state(false);
+  let sessionExpanded = $state(false);
 
   interface WorkspaceCapabilities {
     generator_available: boolean;
@@ -229,6 +234,29 @@
     pathParamValues = { ...pathParamValues, [key]: value };
   }
 
+  function setPortraitPane(next: PortraitPane) {
+    if ((next === 'request' || next === 'response') && !selectedEndpoint) return;
+    portraitPane = next;
+  }
+
+  function syncPortraitMode(enabled: boolean) {
+    portraitMode = enabled;
+    if (!enabled) {
+      toolsExpanded = false;
+      sessionExpanded = false;
+      return;
+    }
+
+    if (!selectedEndpoint) {
+      portraitPane = 'browse';
+      return;
+    }
+
+    if (portraitPane === 'browse') {
+      portraitPane = result ? 'response' : 'request';
+    }
+  }
+
   $effect(() => writeSetting('language', language));
   $effect(() => writeSetting('themePreference', themePreference));
   $effect(() => {
@@ -260,6 +288,7 @@
   async function reloadFromDir(dir: string) {
     apiHttpDir = dir;
     selectedEndpoint = null;
+    portraitPane = 'browse';
     result = null;
     requestContent = '';
     originalRequestContent = '';
@@ -318,6 +347,7 @@
         });
       }
       adoptTokenFromResult(result, selectedEndpoint.path);
+      if (result) portraitPane = 'response';
     } catch (e) {
       result = { stdout: '', stderr: String(e), exit_code: -1 };
     } finally {
@@ -373,6 +403,7 @@
         });
       }
       adoptTokenFromResult(result, selectedEndpoint.path);
+      if (result) portraitPane = 'response';
     } catch (e) {
       result = { stdout: '', stderr: String(e), exit_code: -1 };
     } finally {
@@ -483,6 +514,7 @@
 
   async function select(ep: Endpoint) {
     selectedEndpoint = ep;
+    portraitPane = 'request';
     result = null;
     await loadRequestDetail(ep);
   }
@@ -513,27 +545,48 @@
     return value === 'system' || value === 'light' || value === 'dark';
   }
 
-  onMount(async () => {
+  onMount(() => {
     const storedLanguage = readSetting('language') as Language | null;
     const storedTheme = readSetting('themePreference');
+    let cleanupDark = () => {};
+    let cleanupPortrait = () => {};
     language = storedLanguage && languages.includes(storedLanguage) ? storedLanguage : detectLanguage();
     themePreference = isThemePreference(storedTheme) ? storedTheme : 'system';
     if (typeof window !== 'undefined' && 'matchMedia' in window) {
       const media = window.matchMedia('(prefers-color-scheme: dark)');
-      systemPrefersDark = media.matches;
-      media.addEventListener('change', (event) => {
+      const portraitMedia = window.matchMedia('(max-width: 1180px)');
+      const handleTheme = (event: MediaQueryList | MediaQueryListEvent) => {
         systemPrefersDark = event.matches;
-      });
+      };
+      const handlePortrait = (event: MediaQueryList | MediaQueryListEvent) => {
+        syncPortraitMode(event.matches);
+      };
+
+      handleTheme(media);
+      handlePortrait(portraitMedia);
+
+      media.addEventListener('change', handleTheme);
+      portraitMedia.addEventListener('change', handlePortrait);
+
+      cleanupDark = () => media.removeEventListener('change', handleTheme);
+      cleanupPortrait = () => portraitMedia.removeEventListener('change', handlePortrait);
     }
     selectedEnv = readSetting('selectedEnv') ?? '';
     tokenVisible = readSetting('tokenVisible') === 'true';
     traceHeight = readSetting('traceHeight') ?? defaultTraceHeight;
     settingsReady = true;
-    await loadAll();
-    if (apiHttpDir) {
-      await invoke('start_file_watcher', { apiHttpDir }).catch(() => {});
-      await listen('api-http-changed', loadAll);
-    }
+    void (async () => {
+      await loadAll();
+      if (apiHttpDir) {
+        await invoke('start_file_watcher', { apiHttpDir }).catch(() => {});
+        await listen('api-http-changed', loadAll);
+      }
+    })();
+
+    return () => {
+      cleanupDark();
+      cleanupPortrait();
+    };
   });
 </script>
 
@@ -558,8 +611,13 @@
 
       <section class="control-panel">
         <div class="control-group control-group-wide">
-          <div class="group-label">{t('workspaceTools')}</div>
-          <div class="group-controls">
+          <div class="group-header">
+            <div class="group-label">{t('workspaceTools')}</div>
+            <button class="group-toggle" type="button" onclick={() => toolsExpanded = !toolsExpanded}>
+              {portraitMode ? (toolsExpanded ? t('hide') : t('show')) : t('workspaceTools')}
+            </button>
+          </div>
+          <div class="group-controls" class:collapsed={portraitMode && !toolsExpanded}>
             <label class="field compact-field">
               <span>{t('sync')}</span>
               <select bind:value={syncEnv}>
@@ -605,7 +663,13 @@
         </div>
 
         <div class="control-group">
-          <div class="group-controls group-controls-tight">
+          <div class="group-header">
+            <div class="group-label">{t('session')}</div>
+            <button class="group-toggle" type="button" onclick={() => sessionExpanded = !sessionExpanded}>
+              {portraitMode ? (sessionExpanded ? t('hide') : t('show')) : t('session')}
+            </button>
+          </div>
+          <div class="group-controls group-controls-tight" class:collapsed={portraitMode && !sessionExpanded}>
             {#if envs.length > 0}
               <label class="field compact-field">
                 <span>{t('env')}</span>
@@ -631,7 +695,7 @@
               </select>
             </label>
             <label class="field token-field">
-              <span>{t('token')}</span>
+              <span>{t('token')} <em class="field-note">({token.trim() ? t('tokenLoaded') : t('tokenOptional')})</em></span>
               <div class="token-wrap">
                 {#if tokenVisible}
                   <input type="text" bind:value={token} placeholder={t('bearerToken')} />
@@ -642,7 +706,6 @@
                   {tokenVisible ? t('hide') : t('show')}
                 </button>
               </div>
-              <small>{token.trim() ? t('tokenLoaded') : t('tokenOptional')}</small>
             </label>
           </div>
         </div>
@@ -650,7 +713,15 @@
     </div>
   </header>
 
-  <main class="shell">
+  {#if portraitMode}
+    <nav class="portrait-nav" aria-label={t('view')}>
+      <button class:active={portraitPane === 'browse'} onclick={() => setPortraitPane('browse')}>{t('browse')}</button>
+      <button class:active={portraitPane === 'request'} onclick={() => setPortraitPane('request')} disabled={!selectedEndpoint}>{t('requestView')}</button>
+      <button class:active={portraitPane === 'response'} onclick={() => setPortraitPane('response')} disabled={!selectedEndpoint}>{t('response')}</button>
+    </nav>
+  {/if}
+
+  <main class="shell" data-portrait-mode={portraitMode ? 'true' : 'false'} data-portrait-pane={portraitPane}>
     <aside class="sidebar">
       <div class="sidebar-top">
         <div class="sidebar-summary">
@@ -1098,6 +1169,25 @@
     min-width: 0;
   }
 
+  .group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .group-toggle {
+    display: none;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text-dim);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
   .group-controls {
     display: flex;
     flex-wrap: wrap;
@@ -1110,10 +1200,24 @@
     justify-content: flex-end;
   }
 
+  .group-controls.collapsed {
+    display: none;
+  }
+
   .field {
     display: grid;
     gap: 6px;
     min-width: 0;
+  }
+
+  .field-note {
+    font-style: normal;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--color-text-dim);
+    opacity: 0.9;
+    margin-left: 4px;
   }
 
   .compact-field select,
@@ -1216,7 +1320,6 @@
     gap: 8px;
   }
 
-  .token-field small,
   .editor-actions small,
   .section-head small,
   .search-hint {
@@ -1229,14 +1332,46 @@
     grid-template-columns: clamp(280px, 24vw, 360px) minmax(0, 1fr);
     flex: 1;
     min-height: 0;
+    overflow: hidden;
+  }
+
+  .portrait-nav {
+    display: none;
+    padding: 10px 14px 0;
+    gap: 8px;
+    background: color-mix(in oklch, var(--color-surface) 88%, var(--color-bg));
+  }
+
+  .portrait-nav button {
+    flex: 1;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-dim);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .portrait-nav button.active {
+    background: var(--color-primary-tint);
+    border-color: color-mix(in oklch, var(--color-primary) 26%, var(--color-border));
+    color: var(--color-text);
+  }
+
+  .portrait-nav button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .sidebar {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
+    overflow: hidden;
   }
 
   .sidebar-top {
@@ -1279,6 +1414,7 @@
     flex: 1;
     overflow: auto;
     padding: 10px 10px 14px;
+    min-height: 0;
   }
 
   .hint {
@@ -1527,7 +1663,7 @@
     min-width: 0;
     display: grid;
     gap: 6px;
-    padding: 10px 12px;
+    padding: 9px 12px;
     background: var(--color-surface-alt);
     border: 1px solid var(--color-border);
     border-radius: 14px;
@@ -1589,6 +1725,7 @@
   .param-grid {
     display: grid;
     gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 
   .param-field {
@@ -1783,9 +1920,51 @@
   }
 
   @media (max-width: 1120px) {
+    .portrait-nav {
+      display: flex;
+    }
+
     .topbar-main,
     .shell {
       grid-template-columns: 1fr;
+    }
+
+    .group-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .control-group {
+      gap: 8px;
+      padding: 10px 12px;
+    }
+
+    .control-group .group-label {
+      font-size: 10px;
+    }
+
+    .shell[data-portrait-mode='true'][data-portrait-pane='browse'] .panel {
+      display: none;
+    }
+
+    .shell[data-portrait-mode='true'][data-portrait-pane='request'] .sidebar,
+    .shell[data-portrait-mode='true'][data-portrait-pane='response'] .sidebar {
+      display: none;
+    }
+
+    .shell[data-portrait-mode='true'] .sidebar {
+      max-height: none;
+      border-right: none;
+    }
+
+    .shell[data-portrait-mode='true'] .panel {
+      min-height: 0;
+    }
+
+    .shell[data-portrait-mode='true'][data-portrait-pane='request'] .result-stack,
+    .shell[data-portrait-mode='true'][data-portrait-pane='response'] .composer-stack {
+      display: none;
     }
 
     .sidebar {
@@ -1795,13 +1974,53 @@
     }
 
     .panel-shell {
-      padding: 14px;
+      padding: 12px;
     }
 
-    .meta-card,
     .sidebar-summary,
     .assistant-grid {
       grid-template-columns: 1fr;
+    }
+
+    .shell[data-portrait-mode='true'] .meta-card {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .shell[data-portrait-mode='true'] .meta-block {
+      padding: 8px 10px;
+      gap: 4px;
+    }
+
+    .sidebar-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .summary-stat {
+      flex: 1 1 140px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+
+    .summary-stat strong {
+      font-size: 16px;
+    }
+
+    .workspace-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .req-bar {
+      position: sticky;
+      top: 0;
+      z-index: 4;
     }
 
     .assistant-section + .assistant-section {
@@ -1827,6 +2046,15 @@
       align-items: stretch;
     }
 
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+    }
+
+    .brand-copy strong {
+      font-size: 16px;
+    }
+
     .req-actions,
     .group-controls {
       width: 100%;
@@ -1840,6 +2068,14 @@
     .token-field {
       min-width: 0;
       width: 100%;
+    }
+
+    .summary-stat {
+      flex: 1 1 100%;
+    }
+
+    .shell[data-portrait-mode='true'] .meta-card {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
@@ -1855,9 +2091,21 @@
       font-size: 16px;
     }
 
+    .portrait-nav {
+      padding-inline: 10px;
+    }
+
     .section-head {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    .shell[data-portrait-mode='true'] .meta-card {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .shell[data-portrait-mode='true'] .param-grid {
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     }
 
     .editor-actions {
