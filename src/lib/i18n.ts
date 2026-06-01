@@ -77,6 +77,13 @@ const dictionaries = {
     tokenLoaded: 'token loaded',
     tokenOptional: 'token optional',
     openImported: 'Open imported file',
+    copyBody: 'Copy body',
+    copyTrace: 'Copy trace',
+    copied: 'Copied',
+    prettyJson: 'Pretty JSON',
+    rawBody: 'Raw body',
+    responsePending: 'No response yet',
+    responsePendingHint: 'Run the request to populate this panel.',
   },
   es: {
     appName: 'Yacito',
@@ -153,6 +160,13 @@ const dictionaries = {
     tokenLoaded: 'token listo',
     tokenOptional: 'token opcional',
     openImported: 'Abrir importado',
+    copyBody: 'Copiar body',
+    copyTrace: 'Copiar trace',
+    copied: 'Copiado',
+    prettyJson: 'JSON prolijo',
+    rawBody: 'Body crudo',
+    responsePending: 'Todavía no hay respuesta',
+    responsePendingHint: 'Ejecutá el request para llenar este panel.',
   },
 } satisfies Record<Language, Record<string, string>>;
 

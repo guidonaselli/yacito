@@ -74,11 +74,15 @@
   }
 
   let parsedResult = $derived(result?.stdout ? parseOutput(result.stdout) : null);
+  let hasResponse = $derived(Boolean(result && (result.stdout || result.stderr)));
 
   const STORAGE_PREFIX = 'yacito:';
   const defaultTraceHeight = '120px';
+  const minTraceHeight = 40;
+  const minResponseBodyHeight = 160;
 
   let settingsReady = $state(false);
+  let workspaceSettingsReady = $state(false);
 
   function readSetting(key: string): string | null {
     if (typeof localStorage === 'undefined') return null;
@@ -88,6 +92,43 @@
   function writeSetting(key: string, value: string | boolean) {
     if (!settingsReady || typeof localStorage === 'undefined') return;
     localStorage.setItem(`${STORAGE_PREFIX}${key}`, String(value));
+  }
+
+  function workspaceStoragePrefix(dir = apiHttpDir): string | null {
+    const normalized = dir.trim();
+    return normalized ? `${STORAGE_PREFIX}workspace:${normalized}:` : null;
+  }
+
+  function readWorkspaceSetting(key: string, dir = apiHttpDir): string | null {
+    if (typeof localStorage === 'undefined') return null;
+    const prefix = workspaceStoragePrefix(dir);
+    if (!prefix) return null;
+    return localStorage.getItem(`${prefix}${key}`);
+  }
+
+  function writeWorkspaceSetting(key: string, value: string | boolean) {
+    if (!workspaceSettingsReady || typeof localStorage === 'undefined') return;
+    const prefix = workspaceStoragePrefix();
+    if (!prefix) return;
+    localStorage.setItem(`${prefix}${key}`, String(value));
+  }
+
+  function readStringArraySetting(key: string): string[] | null {
+    const raw = readWorkspaceSetting(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function restoreExpandedServices(nextServices: ServiceFile[]) {
+    const saved = new Set(readStringArraySetting('expandedServices') ?? []);
+    const available = nextServices.map((service) => service.service);
+    const matching = available.filter((service) => saved.has(service));
+    expanded = new Set(matching.length > 0 ? matching : available);
   }
 
   let executing = $state(false);
@@ -111,10 +152,16 @@
   let importedFile = $state<string | null>(null);
   let traceHeight = $state(defaultTraceHeight);
   let traceOutEl = $state<HTMLPreElement | null>(null);
+  let responseOutputEl = $state<HTMLDivElement | null>(null);
+  let traceLabelEl = $state<HTMLDivElement | null>(null);
+  let responseBodyLabelEl = $state<HTMLDivElement | null>(null);
+  let traceResizeHandleEl = $state<HTMLButtonElement | null>(null);
   let portraitMode = $state(false);
   let portraitPane = $state<PortraitPane>('browse');
   let toolsExpanded = $state(false);
   let sessionExpanded = $state(false);
+  let responsePretty = $state(true);
+  let copiedTarget = $state<'body' | 'trace' | null>(null);
 
   interface WorkspaceCapabilities {
     generator_available: boolean;
@@ -158,6 +205,25 @@
         } satisfies PathParamField;
       })
       .filter((field): field is PathParamField => Boolean(field));
+  });
+
+  let parsedResponseBody = $derived.by(() => {
+    const body = parsedResult?.body;
+    if (!body) return null;
+    try {
+      return JSON.parse(body);
+    } catch {
+      return null;
+    }
+  });
+
+  let canPrettyResponse = $derived(parsedResponseBody !== null);
+
+  let responseBodyOutput = $derived.by(() => {
+    if (responsePretty && parsedResponseBody !== null) {
+      return JSON.stringify(parsedResponseBody, null, 2);
+    }
+    return parsedResult?.body || result?.stdout || '';
   });
 
   function t(key: TranslationKey, params: Record<string, string | number> = {}) {
@@ -236,16 +302,13 @@
 
   function setPortraitPane(next: PortraitPane) {
     if ((next === 'request' || next === 'response') && !selectedEndpoint) return;
+    if (next === 'response' && !hasResponse) return;
     portraitPane = next;
   }
 
   function syncPortraitMode(enabled: boolean) {
     portraitMode = enabled;
-    if (!enabled) {
-      toolsExpanded = false;
-      sessionExpanded = false;
-      return;
-    }
+    if (!enabled) return;
 
     if (!selectedEndpoint) {
       portraitPane = 'browse';
@@ -253,7 +316,7 @@
     }
 
     if (portraitPane === 'browse') {
-      portraitPane = result ? 'response' : 'request';
+      portraitPane = hasResponse ? 'response' : 'request';
     }
   }
 
@@ -263,13 +326,47 @@
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.theme = activeTheme;
   });
-  $effect(() => writeSetting('selectedEnv', selectedEnv));
   $effect(() => writeSetting('tokenVisible', tokenVisible));
-  $effect(() => writeSetting('traceHeight', traceHeight));
+  $effect(() => writeWorkspaceSetting('selectedEnv', selectedEnv));
+  $effect(() => writeWorkspaceSetting('traceHeight', traceHeight));
+  $effect(() => writeWorkspaceSetting('toolsExpanded', toolsExpanded));
+  $effect(() => writeWorkspaceSetting('sessionExpanded', sessionExpanded));
+  $effect(() => writeWorkspaceSetting('expandedServices', JSON.stringify([...expanded])));
+  $effect(() => writeWorkspaceSetting('portraitPane', portraitPane));
+  $effect(() => writeWorkspaceSetting('responsePretty', responsePretty));
+  $effect(() => {
+    if (portraitPane === 'response' && !hasResponse) {
+      portraitPane = selectedEndpoint ? 'request' : 'browse';
+    }
+  });
+
+  function hydrateWorkspaceSettings(dir: string) {
+    if (!dir) {
+      workspaceSettingsReady = false;
+      return;
+    }
+
+    workspaceSettingsReady = false;
+    traceHeight = readWorkspaceSetting('traceHeight', dir) ?? defaultTraceHeight;
+    selectedEnv = readWorkspaceSetting('selectedEnv', dir) ?? '';
+    toolsExpanded = readWorkspaceSetting('toolsExpanded', dir) === 'true';
+    sessionExpanded = readWorkspaceSetting('sessionExpanded', dir) === 'true';
+    responsePretty = readWorkspaceSetting('responsePretty', dir) !== 'false';
+
+    const storedPortraitPane = readWorkspaceSetting('portraitPane', dir);
+    if (storedPortraitPane === 'browse' || storedPortraitPane === 'request' || storedPortraitPane === 'response') {
+      portraitPane = storedPortraitPane;
+    } else {
+      portraitPane = 'browse';
+    }
+
+    workspaceSettingsReady = true;
+  }
 
   async function loadAll() {
     try {
       apiHttpDir = await invoke<string>('get_api_http_dir');
+      hydrateWorkspaceSettings(apiHttpDir);
       services = await invoke<ServiceFile[]>('load_services', { apiHttpDir });
       const newEnvs = await invoke<string[]>('get_envs', { apiHttpDir });
       envs = newEnvs;
@@ -279,7 +376,7 @@
       if (newEnvs.length > 0 && !newEnvs.includes(selectedEnv)) {
         selectedEnv = newEnvs[0];
       }
-      expanded = new Set(services.map(s => s.service));
+      restoreExpandedServices(services);
     } catch (e) {
       console.error('load failed:', e);
     }
@@ -287,6 +384,7 @@
 
   async function reloadFromDir(dir: string) {
     apiHttpDir = dir;
+    hydrateWorkspaceSettings(apiHttpDir);
     selectedEndpoint = null;
     portraitPane = 'browse';
     result = null;
@@ -299,7 +397,7 @@
       ? await invoke<WorkspaceCapabilities>('get_workspace_capabilities', { apiHttpDir })
       : { generator_available: false, generator_path: null, internal_generator_available: false };
     selectedEnv = newEnvs.includes(selectedEnv) ? selectedEnv : (newEnvs[0] ?? '');
-    expanded = new Set(services.map((s) => s.service));
+    restoreExpandedServices(services);
     if (apiHttpDir) {
       await invoke('start_file_watcher', { apiHttpDir }).catch(() => {});
     }
@@ -487,7 +585,7 @@
   function rememberTraceHeight(node: HTMLPreElement) {
     const observer = new ResizeObserver(() => {
       const height = Math.round(node.getBoundingClientRect().height);
-      if (height >= 40) traceHeight = `${height}px`;
+      if (height >= minTraceHeight) traceHeight = `${height}px`;
     });
     observer.observe(node);
     return {
@@ -495,6 +593,52 @@
         observer.disconnect();
       },
     };
+  }
+
+  function clampTraceHeight(nextHeight: number) {
+    if (!responseOutputEl) return Math.max(minTraceHeight, nextHeight);
+    const chromeHeight =
+      (traceLabelEl?.offsetHeight ?? 0) +
+      (responseBodyLabelEl?.offsetHeight ?? 0) +
+      (traceResizeHandleEl?.offsetHeight ?? 0);
+    const maxHeight = Math.max(minTraceHeight, responseOutputEl.clientHeight - chromeHeight - minResponseBodyHeight);
+    return Math.min(Math.max(nextHeight, minTraceHeight), maxHeight);
+  }
+
+  function startTraceResize(event: PointerEvent) {
+    if (!responseOutputEl) return;
+    event.preventDefault();
+
+    const startY = event.clientY;
+    const storedHeight = Number.parseInt(traceHeight, 10);
+    const startHeight = traceOutEl?.getBoundingClientRect().height ?? (Number.isFinite(storedHeight) ? storedHeight : 120);
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      traceHeight = `${clampTraceHeight(startHeight + moveEvent.clientY - startY)}px`;
+    };
+
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+  }
+
+  function resetTraceHeight() {
+    traceHeight = defaultTraceHeight;
+  }
+
+  async function copyResponsePart(target: 'body' | 'trace') {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    const text = target === 'trace' ? (parsedResult?.trace ?? '') : responseBodyOutput;
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    copiedTarget = target;
+    window.setTimeout(() => {
+      if (copiedTarget === target) copiedTarget = null;
+    }, 1200);
   }
 
   async function selectImportedFile(file: string) {
@@ -571,9 +715,7 @@
       cleanupDark = () => media.removeEventListener('change', handleTheme);
       cleanupPortrait = () => portraitMedia.removeEventListener('change', handlePortrait);
     }
-    selectedEnv = readSetting('selectedEnv') ?? '';
     tokenVisible = readSetting('tokenVisible') === 'true';
-    traceHeight = readSetting('traceHeight') ?? defaultTraceHeight;
     settingsReady = true;
     void (async () => {
       await loadAll();
@@ -717,7 +859,7 @@
     <nav class="portrait-nav" aria-label={t('view')}>
       <button class:active={portraitPane === 'browse'} onclick={() => setPortraitPane('browse')}>{t('browse')}</button>
       <button class:active={portraitPane === 'request'} onclick={() => setPortraitPane('request')} disabled={!selectedEndpoint}>{t('requestView')}</button>
-      <button class:active={portraitPane === 'response'} onclick={() => setPortraitPane('response')} disabled={!selectedEndpoint}>{t('response')}</button>
+      <button class:active={portraitPane === 'response'} onclick={() => setPortraitPane('response')} disabled={!hasResponse}>{t('response')}</button>
     </nav>
   {/if}
 
@@ -882,13 +1024,30 @@
                     <span>{t('response')}</span>
                     <strong>{t('responsePanel')}</strong>
                   </div>
-                  {#if result}
-                    {#if result.exit_code === 0}
-                      <span class="ok">✓ {t('ok')}</span>
-                    {:else}
-                      <span class="err">✗ {t('exit', { code: result.exit_code })}</span>
+                  <div class="response-head-actions">
+                    {#if canPrettyResponse}
+                      <button class="ghost-btn" type="button" onclick={() => responsePretty = !responsePretty}>
+                        {responsePretty ? t('rawBody') : t('prettyJson')}
+                      </button>
                     {/if}
-                  {/if}
+                    {#if parsedResult?.trace}
+                      <button class="ghost-btn" type="button" onclick={() => copyResponsePart('trace')}>
+                        {copiedTarget === 'trace' ? t('copied') : t('copyTrace')}
+                      </button>
+                    {/if}
+                    {#if result?.stdout}
+                      <button class="ghost-btn" type="button" onclick={() => copyResponsePart('body')}>
+                        {copiedTarget === 'body' ? t('copied') : t('copyBody')}
+                      </button>
+                    {/if}
+                    {#if result}
+                      {#if result.exit_code === 0}
+                        <span class="ok">✓ {t('ok')}</span>
+                      {:else}
+                        <span class="err">✗ {t('exit', { code: result.exit_code })}</span>
+                      {/if}
+                    {/if}
+                  </div>
                 </div>
 
                 {#if executing}
@@ -898,17 +1057,33 @@
                     <pre class="out err-out">{result.stderr}</pre>
                   {/if}
                   {#if result.stdout}
-                    {#if parsedResult?.trace}
-                      <div class="trace-label">HTTP Trace</div>
-                      <pre bind:this={traceOutEl} use:rememberTraceHeight class="out trace-out" style:height={traceHeight}>{parsedResult.trace}</pre>
-                      <div class="trace-label">Response Body</div>
-                    {/if}
-                    <pre class="out ok-out">{parsedResult?.body || result.stdout}</pre>
+                    <div class="response-output" class:has-trace={Boolean(parsedResult?.trace)} bind:this={responseOutputEl}>
+                      {#if parsedResult?.trace}
+                        <div class="trace-label" bind:this={traceLabelEl}>HTTP Trace</div>
+                        <pre bind:this={traceOutEl} use:rememberTraceHeight class="out trace-out" style:height={traceHeight}>{parsedResult.trace}</pre>
+                        <button
+                          class="trace-resizer"
+                          type="button"
+                          bind:this={traceResizeHandleEl}
+                          onpointerdown={startTraceResize}
+                          ondblclick={resetTraceHeight}
+                          title="Drag to resize. Double click to reset."
+                          aria-label="Resize trace and response body"
+                        >
+                          <span></span>
+                        </button>
+                        <div class="trace-label response-body-label" bind:this={responseBodyLabelEl}>Response Body</div>
+                      {/if}
+                      <pre class="out ok-out response-body-out">{responseBodyOutput}</pre>
+                    </div>
                   {:else if !result.stderr}
                     <div class="status-msg">{t('noOutput')}</div>
                   {/if}
                 {:else}
-                  <div class="status-msg idle">{t('pressSend')}</div>
+                  <div class="status-msg idle">
+                    <strong>{t('responsePending')}</strong>
+                    <small>{t('responsePendingHint')}</small>
+                  </div>
                 {/if}
               </div>
             </div>
@@ -1554,15 +1729,22 @@
   }
 
   .panel {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
-    overflow: auto;
+    min-height: 0;
+    overflow: hidden;
     background: var(--color-bg);
   }
 
   .panel-shell {
+    flex: 1;
+    min-height: 0;
     padding: 18px;
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 18px;
+    overflow: auto;
   }
 
   .panel-card,
@@ -1636,7 +1818,8 @@
     display: grid;
     grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.88fr);
     gap: 18px;
-    align-items: start;
+    align-items: stretch;
+    min-height: 0;
   }
 
   .composer-stack,
@@ -1644,12 +1827,14 @@
     display: grid;
     gap: 18px;
     min-width: 0;
+    min-height: 0;
   }
 
   .result-stack {
     position: sticky;
     top: 18px;
-    align-self: start;
+    align-self: stretch;
+    height: fit-content;
   }
 
   .meta-card {
@@ -1693,6 +1878,14 @@
 
   .section-head strong {
     font-size: 15px;
+  }
+
+  .response-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .editor-actions {
@@ -1777,9 +1970,22 @@
 
   .resp {
     min-height: min(70vh, 620px);
+    height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  .response-output {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .response-output.has-trace {
+    gap: 0;
   }
 
   .resp.resp-err,
@@ -1810,7 +2016,7 @@
     color: var(--color-danger);
     background: var(--color-danger-tint);
     flex: 0 0 auto;
-    max-height: 35%;
+    max-height: min(28vh, 220px);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -1825,18 +2031,77 @@
     flex: 0 0 auto;
     min-height: 40px;
     max-height: 60vh;
-    resize: vertical;
     color: var(--color-text-dim);
+  }
+
+  .trace-resizer {
+    height: 14px;
+    padding: 0;
+    border: none;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: row-resize;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    transition: background-color 180ms ease, border-color 180ms ease;
+  }
+
+  .trace-resizer:hover,
+  .trace-resizer:focus-visible {
+    background: var(--color-surface-alt);
+    border-color: var(--color-border-strong);
+  }
+
+  .trace-resizer span {
+    width: 56px;
+    height: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background:
+      repeating-linear-gradient(
+        to right,
+        transparent 0 6px,
+        var(--color-border-strong) 6px 10px
+      ),
+      var(--color-surface-alt);
+    pointer-events: none;
+  }
+
+  .response-body-label {
+    border-top: none;
+  }
+
+  .response-body-out {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .response-output.has-trace .response-body-out {
+    min-height: 160px;
   }
 
   .status-msg {
     flex: 1;
     display: grid;
     place-items: center;
+    gap: 6px;
     padding: 32px;
     text-align: center;
     color: var(--color-text-dim);
     font-size: 15px;
+  }
+
+  .status-msg strong {
+    color: var(--color-text);
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  .status-msg small {
+    max-width: 34ch;
+    line-height: 1.5;
   }
 
   .idle {
